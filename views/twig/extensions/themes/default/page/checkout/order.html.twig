@@ -1,0 +1,10 @@
+{% extends "page/checkout/order.html.twig" %}
+
+{% block checkout_order_btn_confirm_bottom %}
+    {{ parent() }}
+
+    {% if oView.isMonduPayment() %}
+        <input id="mondu-checkout-input" type="hidden" />
+        <div id="mondu-checkout-widget"></div>
+    {% endif %}
+{% endblock %}
