@@ -1,0 +1,15 @@
+11111111111
+
+{% block admin_order_overview_basic %}
+    {{ parent() }}
+    {% if oView.isMonduOrder() %}
+        <tr>
+            <td class="edittext">Mondu Order ID:</td>
+            <td class="edittext">{{ oView.getMonduOrderId() }}</td>
+        </tr>
+        <tr>
+            <td class="edittext">Mondu Order Status:</td>
+            <td class="edittext">{{ oView.getMonduOrderStatus() }}</td>
+        </tr>
+    {% endif %}
+{% endblock %} 

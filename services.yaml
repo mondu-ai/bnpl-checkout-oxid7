@@ -1,0 +1,15 @@
+imports:
+    - { resource: Settings/services.yaml }
+
+services:
+    _defaults:
+        public: false
+        autowire: true
+
+    OxidEsales\MonduPayment\Core\Http\MonduClient:
+        class: 'OxidEsales\MonduPayment\Core\Http\MonduClient'
+        public: true
+
+    OxidEsales\MonduPayment\Services\BuyerFeeCentsServiceInterface:
+        class: 'OxidEsales\MonduPayment\Services\BuyerFeeCentsService'
+        public: true

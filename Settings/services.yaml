@@ -1,0 +1,8 @@
+services:
+  _defaults:
+    public: false
+    autowire: true
+
+  OxidEsales\MonduPayment\Settings\Service\ModuleSettingsServiceInterface:
+    class: OxidEsales\MonduPayment\Settings\Service\ModuleSettingsService
+    public: true
