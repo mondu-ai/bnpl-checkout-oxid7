@@ -2,7 +2,7 @@
     "name": "https://github.com/mondu-ai/bnpl-checkout-oxid7",
     "description": "Mondu payment method for the OXID eShop.",
     "type": "oxideshop-module",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "license": [
         "OSL-3.0",
         "AFL-3.0"
