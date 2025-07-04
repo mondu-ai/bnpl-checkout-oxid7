@@ -60,6 +60,13 @@ class MonduOrderMapper
         $shipping = $basket->getDeliveryCost()->getPrice();
         $shopUrl = Registry::getConfig()->getCurrentShopUrl();
 
+        $oDelAdressMD5 = $this->getBasketUser()->getEncodedDeliveryAddress();
+        if (Registry::getSession()->getVariable('deladrid')) {
+            $oDelAdress = oxNew(\OxidEsales\Eshop\Application\Model\Address::class);
+            $oDelAdress->load(Registry::getSession()->getVariable('deladrid'));
+            $oDelAdressMD5 .= $oDelAdress->getEncodedDeliveryAddress();
+        }
+
         $externalReferenceId = uniqid('M_OX_');
         $data = [
             "currency" => $basket->getBasketCurrency()->name,
@@ -69,7 +76,7 @@ class MonduOrderMapper
             "buyer" => MonduHelper::removeEmptyElementsFromArray($this->getBuyerData()),
             "billing_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserBillingAddress()),
             "shipping_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserDeliveryAddress()),
-            "success_url" => $shopUrl . '?cl=order&fnc=execute&order_uuid=' . $monduOrderUuid . '&sDeliveryAddressMD5=' . $this->getBasketUser()->getEncodedDeliveryAddress(),
+            "success_url" => $shopUrl . '?cl=order&fnc=execute&order_uuid=' . $monduOrderUuid . '&sDeliveryAddressMD5=' . $oDelAdressMD5,
             "cancel_url" => $shopUrl . '?cl=oemonducancel',
             "declined_url" => $shopUrl . '?cl=oemondudeclined',
             "state_flow" => 'authorization_flow',
