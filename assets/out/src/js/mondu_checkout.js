@@ -18,29 +18,34 @@ class MonduCheckout {
 
     _registerProperties() {
         this._form = document.getElementById('orderConfirmAgbBottom');
-        this._submitButton = document.querySelector('.r-basket-product-btn-wrap button[type="button"]');
+        this._submitButton = document.querySelector('button.btn.btn-highlight.btn-lg.w-100');
         this._inputEl = document.getElementById('mondu-checkout-input');
         this._paymentUrl = paymentUrl;
     }
 
     _registerEvents() {
+        console.log("1111111");
+        console.log(this._form);
+
         if (this._form) {
+            console.log("22222222");
             this._form.addEventListener('submit', this._submitForm.bind(this));
         }
 
-        if (this._submitButton && this._inputEl) {
-            this._submitButton.removeAttribute('onclick');
-            this._submitButton.onclick = (e) => {
-                e.preventDefault();
+        if (this._submitButton) {
+            this._submitButton.addEventListener('click', (event) => {
+                event.preventDefault();
                 if (this._form) {
                     this._form.requestSubmit();
                 }
-            };
+            });
         }
     }
 
     async _submitForm(event) {
+        console.log('333');
         if (this._isWidgetComplete()) {
+            console.log('444');
             event.preventDefault();
             return true;
         }
@@ -48,6 +53,7 @@ class MonduCheckout {
         event.preventDefault();
 
         if (this._isWidgetLoaded) {
+            console.log('555');
             const monduOrderData = await this._getMonduOrderData();
 
             console.log(monduOrderData);
@@ -79,6 +85,7 @@ class MonduCheckout {
             const client = new HttpRequest();
             const { data } = await client.post('?cl=oemonducheckout&fnc=createOrder', {});
 
+            console.log(data);
             if (data.token !== 'error') {
                 return data;
             } else {
