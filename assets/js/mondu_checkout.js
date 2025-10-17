@@ -18,7 +18,7 @@ class MonduCheckout {
 
     _registerProperties() {
         this._form = document.getElementById('orderConfirmAgbBottom');
-        this._submitButton = document.querySelector('.r-basket-product-btn-wrap button[type="button"]');
+        this._submitButton = document.querySelector('button.btn.btn-highlight.btn-lg.w-100');
         this._inputEl = document.getElementById('mondu-checkout-input');
         this._paymentUrl = paymentUrl;
     }
@@ -29,7 +29,6 @@ class MonduCheckout {
         }
 
         if (this._submitButton && this._inputEl) {
-            this._submitButton.removeAttribute('onclick');
             this._submitButton.onclick = (e) => {
                 e.preventDefault();
                 if (this._form) {

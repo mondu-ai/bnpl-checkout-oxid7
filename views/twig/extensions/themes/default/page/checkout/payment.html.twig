@@ -1,60 +1,65 @@
 {% extends "page/checkout/payment.html.twig" %}
 
 {% block select_payment %}
-    <script>
-        function handleLogoError(el) {
-            el.setAttribute("src", "{{ oViewConf.getModuleUrl('oemondu','out/src/images/logo.svg') }}");
-            el.removeAttribute("onError");
-        }
-    </script>
-
     {% if oViewConf.isMonduPayment(sPaymentID) %}
-        {% if paymentmethod.getPrice() and paymentmethod.oxpayments__oxaddsum.rawValue != 0 %}
-            {% set oPaymentPrice = paymentmethod.getPrice() %}
-            {% if oViewConf.isFunctionalityEnabled('blShowVATForPayCharge') %}
-                ({{ format_price(oPaymentPrice.getNettoPrice(), { currency: currency }) }}
-                {% if oPaymentPrice.getVatValue() > 0 %}
-                    {{ translate({ ident: "PLUS_VAT" }) }} {{ format_price(oPaymentPrice.getVatValue(), { currency: currency }) }}
-                {% endif %})
-            {% else %}
-                ({{ format_price(oPaymentPrice.getBruttoPrice(), { currency: currency }) }})
-            {% endif %}
-        {% endif %}
+        <div class="well well-sm">
+            <dl>
+                <dt>
+                    <input id="payment_{{ sPaymentID }}"
+                           type="radio"
+                           name="paymentid"
+                           value="{{ sPaymentID }}"
+                           {% if oView.getCheckedPaymentId() == paymentmethod.oxpayments__oxid.value %}checked{% endif %}>
+                    <label for="payment_{{ sPaymentID }}">
+                        <b>{{ paymentmethod.oxpayments__oxdesc.value }}</b>
+                    </label>
+                </dt>
+                <dd class="{% if oView.getCheckedPaymentId() == paymentmethod.oxpayments__oxid.value %}activePayment{% endif %}">
+                    <div class="monduPaymentLogo" style="margin: 12px 0">
+                        <img src="{{ oViewConf.getMonduLogo() }}" onError="handleLogoError(this)">
+                    </div>
 
-        {% for value in paymentmethod.getDynValues() %}
-            <div class="form-group">
-                <label class="control-label col-lg-3" for="{{ sPaymentID }}_{{ loop.index }}">{{ value.name }}</label>
-                <div class="col-lg-9">
-                    <input id="{{ sPaymentID }}_{{ loop.index }}" type="text" class="form-control textbox" size="20"
-                           maxlength="64" name="dynvalue[{{ value.name }}]" value="{{ value.value }}">
-                </div>
-            </div>
-        {% endfor %}
-
-        <li class="elements-list-item">
-            <label class="topregal-radio flex " for="payment_{{ sPaymentID }}">
-                <input id="payment_{{ sPaymentID }}" type="radio" name="paymentid" value="{{ sPaymentID }}"
-                       {% if oView.getCheckedPaymentId() == paymentmethod.oxpayments__oxid.value %}checked{% endif %}>
-                <span class="fake"></span>
-                <span class="topregal-radio-text">
-                <span class="topregal-radio-text-img">
-                    <svg class="icon payment-icon mondu-icon">
-                        <use xlink:href="/out/topregal-redesign-2018/svg/sprite/multsprite.svg#mondu"></use>
-                    </svg>
-                </span>
-                <span class="topregal-radio-text-layout">
-                    <span class="topregal-radio-text-title">{{ paymentmethod.oxpayments__oxdesc.value|raw }}</span>
-                    <span class="topregal-radio-text-description">
-                        {% block checkout_payment_longdesc %}
-                            {% if paymentmethod.oxpayments__oxlongdesc.value|striptags|trim %}
-                                {{ paymentmethod.oxpayments__oxlongdesc.getRawValue()|raw }}
+                    {% if paymentmethod.getPrice() and paymentmethod.oxpayments__oxaddsum.rawValue != 0 %}
+                        {% set oPaymentPrice = paymentmethod.getPrice() %}
+                        {% if oViewConf.isFunctionalityEnabled('blShowVATForPayCharge') %}
+                            ({{ format_price({ price: oPaymentPrice.getNettoPrice(), currency: currency }) }}
+                            {% if oPaymentPrice.getVatValue() > 0 %}
+                                {{ translate({ ident: "PLUS_VAT" }) }} {{ format_price({ price: oPaymentPrice.getVatValue(), currency: currency }) }})
                             {% endif %}
-                        {% endblock %}
-                    </span>
-                </span>
-            </span>
-            </label>
-        </li>
+                        {% else %}
+                            ({{ format_price({ price: oPaymentPrice.getBruttoPrice(), currency: currency }) }})
+                        {% endif %}
+                    {% endif %}
+
+                    {% for value in paymentmethod.getDynValues() %}
+                        <div class="form-group">
+                            <label class="control-label col-lg-3" for="{{ sPaymentID }}_{{ loop.index }}">
+                                {{ value.name }}
+                            </label>
+                            <div class="col-lg-9">
+                                <input id="{{ sPaymentID }}_{{ loop.index }}"
+                                       type="text"
+                                       class="form-control textbox"
+                                       size="20"
+                                       maxlength="64"
+                                       name="dynvalue[{{ value.name }}]"
+                                       value="{{ value.value }}">
+                            </div>
+                        </div>
+                    {% endfor %}
+
+                    <div class="clearfix"></div>
+
+                    {% block checkout_payment_longdesc %}
+                        {% if paymentmethod.oxpayments__oxlongdesc.value|striptags|trim %}
+                            <div class="desc">
+                                {{ paymentmethod.oxpayments__oxlongdesc.getRawValue()|raw }}
+                            </div>
+                        {% endif %}
+                    {% endblock %}
+                </dd>
+            </dl>
+        </div>
     {% else %}
         {{ parent() }}
     {% endif %}

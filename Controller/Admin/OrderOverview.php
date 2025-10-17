@@ -62,15 +62,16 @@ class OrderOverview extends OrderOverview_parent
         return $this->_oOrder && $this->_oOrder->isMonduPayment();
     }
 
-    public function getOrder(): Order
+    protected function getOrder()
     {
         $oOrder = oxNew(Order::class);
         $soxId = $this->getEditObjectId();
 
-        if ($soxId && $soxId !== '-1') {
+        if (isset($soxId) && $soxId != "-1") {
             $oOrder->load($soxId);
+            return $oOrder;
         }
 
-        return $oOrder;
+        return null;
     }
 }

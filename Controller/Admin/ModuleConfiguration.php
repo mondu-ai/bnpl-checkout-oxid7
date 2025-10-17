@@ -82,7 +82,7 @@ class ModuleConfiguration extends ModuleConfiguration_parent
         oxNew(Config::class)->setIsMerchantIdentified($isMerchantIdentified);
     }
 
-    public function registerWebhooks(): void
+    protected function registerWebhooks(): void
     {
         foreach (self::REQUIRED_WEBHOOK_TOPICS as $webhookTopic) {
             $webhookParams = oxNew(Webhook::class, $webhookTopic)->getData();

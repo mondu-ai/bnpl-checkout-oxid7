@@ -72,8 +72,7 @@ class MonduOrderMapper
             "currency" => $basket->getBasketCurrency()->name,
             "payment_method" => $paymentMethod,
             "external_reference_id" => $externalReferenceId,
-//            "gross_amount_cents" => round($basket->getPriceForPayment() * 100),
-            "gross_amount_cents" => round($basket->getPrice()->getNettoPrice() * 100), // changed by BG team
+            "gross_amount_cents" => round($basket->getPriceForPayment() * 100),
             "buyer" => MonduHelper::removeEmptyElementsFromArray($this->getBuyerData()),
             "billing_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserBillingAddress()),
             "shipping_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserDeliveryAddress()),
