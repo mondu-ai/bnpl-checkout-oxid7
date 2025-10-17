@@ -41,6 +41,7 @@ class PaymentController extends PaymentController_parent
 
     protected function filterMonduPaymentMethods()
     {
+        $this->_paymentList = !is_null($this->_paymentList) ? $this->_paymentList : [];
         $this->_monduAllowedPaymentMethods = $this->getMonduAllowedPaymentMethods();
 
         if (!$this->_monduAllowedPaymentMethods) {
@@ -64,6 +65,7 @@ class PaymentController extends PaymentController_parent
 
     protected function removeMonduPaymentMethods()
     {
+        $this->_paymentList = !is_null($this->_paymentList) ? $this->_paymentList : [];
         $this->_paymentList = array_filter($this->_paymentList, function ($i) {
             return !(stripos($i->oxpayments__oxid->value, self::MONDU_PREFIX) !== false);
         });
