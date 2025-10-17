@@ -101,8 +101,7 @@ class Order extends Order_parent
     public function finalizeOrder(
         \OxidEsales\Eshop\Application\Model\Basket $oBasket,
         $oUser,
-        $blRecalculatingOrder = false,
-        $isPending = false
+        $blRecalculatingOrder = false
     ) {
         $result = parent::finalizeOrder($oBasket, $oUser, $blRecalculatingOrder);
 
@@ -122,19 +121,6 @@ class Order extends Order_parent
                 $monduOrderUuid,
                 ['external_reference_id' => (string) $this->getFieldData('oxorder__oxordernr')]
             );
-
-            if ($isPending) {
-
-                $this->oxorder__oxfolder = new \OxidEsales\Eshop\Core\Field('ORDERFOLDER_PROBLEMS');
-                $this->oxorder__oxtransstatus = new \OxidEsales\Eshop\Core\Field('PENDING');
-
-                $monduOrder = $this->getOrder($monduOrderUuid);
-
-                if ($monduOrder) {
-                    $monduOrder->updateOrderState($params['order_state']);
-                }
-                $this->save();
-            }
         }
 
         if ($this->isMonduPayment() && !$this->getMonduOrders()) {
