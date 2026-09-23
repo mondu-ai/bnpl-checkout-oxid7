@@ -74,13 +74,13 @@ Most classes are instantiated via `oxNew()` (OXID's factory), not DI.
 
 1. Customer selects Mondu payment → `PaymentController::getPaymentList()` filters methods by Mondu API availability
 2. On order confirmation → JS calls `MonduCheckoutController::createOrder()` which maps basket data and creates a Mondu order via API
-3. Mondu widget opens → on success, redirects to `OrderController::execute()` with `order_uuid`
+3. JS redirects the buyer to the returned `hostedCheckoutUrl` (no URL → back to the payment page); after payment Mondu redirects to `OrderController::execute()` with `order_uuid`
 4. `OrderController::monduExecute()` finalizes the OXID order, then confirms it with Mondu API
 5. `PaymentGateway::executePayment()` dispatches to the appropriate payment handler, which stores the Mondu order locally
 
 ### Frontend
 
-Twig templates in `views/twig/extensions/themes/`. JS in `out/src/js/` (`mondu_checkout.js` handles widget init, `http_request.js` for AJAX). Translations: DE, EN, NL in `translations/` (storefront) and `views/admin_twig/` (admin).
+Twig templates in `views/twig/extensions/themes/`. JS in `assets/js/`, mirrored by hand in `out/src/js/` (no build step, edit both): `mondu_checkout.js` intercepts the order confirm submit for Mondu payments and redirects to the hosted checkout, `http_request.js` for AJAX. Translations: DE, EN, NL in `translations/` (storefront) and `views/admin_twig/` (admin).
 
 ### API Environments
 

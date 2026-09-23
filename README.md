@@ -35,7 +35,7 @@ composer require mondu/bnpl-checkout-oxid7
 2. Navigate to Mondu module
 3. In module overview tab, activate Mondu module.
 
-    > NOTE: Page in shop `page/checkout/order.tpl` should have smarty block `checkout_order_btn_confirm_bottom` that wraps up submission form with id `orderConfirmAgbBottom`. Module uses this block in order to load Mondu widget, that is responsible for order creation on Mondu side. Widget will be opened on `orderConfirmAgbBottom` form submit event.
+    > NOTE: Page in shop `page/checkout/order.tpl` should have smarty block `checkout_order_btn_confirm_bottom` that wraps up submission form with id `orderConfirmAgbBottom`. Module uses this block to hook into the `orderConfirmAgbBottom` form submit event: it creates the order on Mondu side and redirects the buyer to the Mondu hosted checkout.
 
     > NOTE: On module activation, three new payment methods (Mondu Invoice, Mondu SEPA and Mondu Installment) are added and activated
 
