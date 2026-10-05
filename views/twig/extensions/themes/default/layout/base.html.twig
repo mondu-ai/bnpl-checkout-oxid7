@@ -1,17 +1,10 @@
 {% extends "layout/base.html.twig" %}
 
-{% block base_style %}
-    {{ parent() }}
-        <link rel="stylesheet" href="{{ style({ include: oViewConf.getModuleUrl('oemondu', 'css/widget.css') }) }}">
-
-{% endblock %}
-
 {% block base_js %}
     {{ parent() }}
 
         {% set paymentUrl = oViewConf.getShopURL() ~ 'index.php?cl=payment' %}
         <script>
-            var widgetUrl = "{{ oViewConf.getWidgetUrl()|raw }}";
             var paymentUrl = "{{ paymentUrl|raw }}";
         </script>
 
