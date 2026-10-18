@@ -1,19 +1,7 @@
 class MonduCheckout {
     init() {
-        this._isWidgetLoaded = this._initWidget(widgetUrl);
         this._registerProperties();
         this._registerEvents();
-    }
-
-    async _initWidget(src) {
-        return new Promise((resolve, reject) => {
-            const widget = document.createElement('script');
-            widget.src = src;
-            document.head.appendChild(widget);
-
-            widget.onload = () => resolve(true);
-            widget.onerror = () => resolve(false);
-        });
     }
 
     _registerProperties() {
@@ -24,60 +12,33 @@ class MonduCheckout {
     }
 
     _registerEvents() {
-        console.log("1111111");
-        console.log(this._form);
-
-        if (this._form) {
-            console.log("22222222");
-            this._form.addEventListener('submit', this._submitForm.bind(this));
+        // The hidden input is rendered only when a Mondu payment method is selected,
+        // other payment methods submit the order form as usual.
+        if (!this._form || !this._inputEl) {
+            return;
         }
 
+        this._form.addEventListener('submit', this._submitForm.bind(this));
+
         if (this._submitButton) {
-            this._submitButton.addEventListener('click', (event) => {
-                event.preventDefault();
-                if (this._form) {
-                    this._form.requestSubmit();
-                }
-            });
+            this._submitButton.onclick = (e) => {
+                e.preventDefault();
+                this._form.requestSubmit();
+            };
         }
     }
 
     async _submitForm(event) {
-        console.log('333');
-        if (this._isWidgetComplete()) {
-            console.log('444');
-            event.preventDefault();
-            return true;
-        }
-
         event.preventDefault();
 
-        if (this._isWidgetLoaded) {
-            console.log('555');
-            const monduOrderData = await this._getMonduOrderData();
+        const monduOrderData = await this._getMonduOrderData();
 
-            console.log(monduOrderData);
-            if (!monduOrderData || !monduOrderData.token) {
-                window.location.href = this._paymentUrl;
-            }
-
-            if (monduOrderData.hostedCheckoutUrl) {
-                window.location.href = monduOrderData.hostedCheckoutUrl;
-            } else {
-                this._renderWidget(monduOrderData.token);
-            }
+        if (monduOrderData && monduOrderData.hostedCheckoutUrl) {
+            window.location.href = monduOrderData.hostedCheckoutUrl;
+            return;
         }
-    }
 
-    async _createMonduOrder() {
-        return new Promise((resolve, reject) => {
-            const widget = document.createElement('script');
-            widget.src = src;
-            document.head.appendChild(widget);
-
-            widget.onload = () => resolve(true);
-            widget.onerror = () => resolve(false);
-        });
+        window.location.href = this._paymentUrl;
     }
 
     async _getMonduOrderData() {
@@ -85,7 +46,6 @@ class MonduCheckout {
             const client = new HttpRequest();
             const { data } = await client.post('?cl=oemonducheckout&fnc=createOrder', {});
 
-            console.log(data);
             if (data.token !== 'error') {
                 return data;
             } else {
@@ -95,50 +55,10 @@ class MonduCheckout {
             return null;
         }
     }
-
-    _renderWidget(token) {
-        const that = this;
-        const removeWidgetContainer = this._removeWidgetContainer.bind(this);
-
-        window.monduCheckout.render({
-            token,
-            onClose() {
-                removeWidgetContainer();
-                if (that._isWidgetComplete()) {
-                    that._form.submit();
-                } else {
-                    window.location.href = that._paymentUrl;
-                }
-            },
-            onSuccess() {
-                that._setMonduComplete('1');
-            }
-        });
-    }
-
-    _removeWidgetContainer() {
-        const widgetContainer = document.getElementById('mondu-checkout-widget');
-        if (widgetContainer) {
-            widgetContainer.style.display = 'none';
-            window.monduCheckout.destroy();
-        }
-    }
-
-    _setMonduComplete(flag) {
-        this._inputEl.dataset.monduComplete = parseInt(flag, 10);
-    }
-
-    _isWidgetComplete() {
-        return parseInt(this._inputEl.dataset.monduComplete, 10) === 1;
-    }
 }
 
 function monduStart() {
-    if (!widgetUrl) {
-        var widgetUrl = 'http://localhost:3002/widget.js';
-    }
-
-    var mondu = new MonduCheckout();
+    const mondu = new MonduCheckout();
     mondu.init();
 }
 

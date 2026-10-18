@@ -17,11 +17,6 @@ class ViewConfig extends ViewConfig_parent
 		$this->_config = oxNew(Config::class);
 	}
 
-	public function getWidgetUrl()
-	{
-		return $this->_config->getWidgetUrl();
-	}
-
 	public function getMonduLogo()
 	{
 		return $this->_config->getMonduLogo();
