@@ -13,7 +13,7 @@ class OrderAdjustmentProcessor
     protected ?Order $_oOrder;
     protected ?MonduOrder $_oMonduOrder;
 
-    public function __construct(Order $order = null)
+    public function __construct(?Order $order = null)
     {
         $this->_client = oxNew(MonduClient::class);
         $this->_oOrder = $order;

@@ -44,7 +44,7 @@ class HttpRequest
      * @return array
      * @throws InvalidRequestException
      */
-    public function get(string $url, array $data = [], array $headers = null): array
+    public function get(string $url, array $data = [], ?array $headers = null): array
     {
         $url = $this->baseUrl . $url;
         $this->headers = $headers == null ? $this->headers : $headers;
@@ -60,7 +60,7 @@ class HttpRequest
      * @return array|null
      * @throws InvalidRequestException
      */
-    public function post(string $url, array $data = [], array $headers = null): ?array
+    public function post(string $url, array $data = [], ?array $headers = null): ?array
     {
         $url = $this->baseUrl . $url;
         $this->headers = $headers == null ? $this->headers : $headers;
