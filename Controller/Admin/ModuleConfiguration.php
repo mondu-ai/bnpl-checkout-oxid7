@@ -87,7 +87,14 @@ class ModuleConfiguration extends ModuleConfiguration_parent
     public function registerWebhooks(): void
     {
         $existingTopics = $this->getRegisteredTopics();
+        if ($existingTopics === null) {
+            // without the list, creating webhooks blind could only produce duplicates or errors
+            MonduHelper::showErrorMessage('MONDU_REGISTER_WEBHOOK_ERROR');
+            return;
+        }
+
         $registered = 0;
+        $failed = 0;
 
         foreach (self::REQUIRED_WEBHOOK_TOPICS as $webhookTopic) {
             if (in_array($webhookTopic, $existingTopics, true)) {
@@ -107,11 +114,15 @@ class ModuleConfiguration extends ModuleConfiguration_parent
                 return;
             }
 
-            // The API error details are already shown by the HTTP client, add a message only when there are none.
-            if (empty($response['body']['errors'])) {
-                MonduHelper::showErrorMessage('MONDU_REGISTER_WEBHOOK_ERROR');
+            if ($this->isAlreadySubscribed($response)) {
+                continue;
             }
 
+            $failed++;
+        }
+
+        if ($failed > 0) {
+            MonduHelper::showErrorMessage('MONDU_REGISTER_WEBHOOK_ERROR');
             return;
         }
 
@@ -121,25 +132,46 @@ class ModuleConfiguration extends ModuleConfiguration_parent
     }
 
     /**
-     * Topics already registered for this shop's webhook address.
+     * Topics already registered for this shop's webhook address, or null when the list can not be loaded.
      */
-    private function getRegisteredTopics(): array
+    private function getRegisteredTopics(): ?array
     {
         $webhooks = $this->_client->getWebhooks();
         if ($webhooks === null) {
-            return [];
+            return null;
         }
 
-        $address = oxNew(Webhook::class, '')->getAddress();
+        $address = Webhook::normalizeAddress(oxNew(Webhook::class, '')->getAddress());
         $topics = [];
 
         foreach ($webhooks as $webhook) {
-            if (($webhook['address'] ?? null) === $address && isset($webhook['topic'])) {
+            if (
+                isset($webhook['topic'], $webhook['address'])
+                && Webhook::normalizeAddress((string) $webhook['address']) === $address
+            ) {
                 $topics[] = $webhook['topic'];
             }
         }
 
         return $topics;
+    }
+
+    /**
+     * The API answers a duplicate subscription with 422 and an error named "webhook".
+     */
+    private function isAlreadySubscribed($response): bool
+    {
+        if (($response['status'] ?? null) !== 422) {
+            return false;
+        }
+
+        foreach ($response['body']['errors'] ?? [] as $error) {
+            if (($error['name'] ?? null) === 'webhook') {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     public function getMonduWebhookNotice(): ?string

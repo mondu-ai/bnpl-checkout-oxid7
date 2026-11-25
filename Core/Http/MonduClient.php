@@ -92,7 +92,7 @@ class MonduClient
     {
         $response = $this->sendRequest('GET', 'webhooks/keys');
         $this->_config->setWebhooksSecret($response['webhook_secret'] ?? '', Registry::getConfig()->getShopId());
-        return $response['webhook_secret'];
+        return $response['webhook_secret'] ?? null;
     }
 
     /**
@@ -104,7 +104,7 @@ class MonduClient
         $perPage = 100;
 
         for ($page = 1; $page <= 20; $page++) {
-            $response = $this->sendRequest('GET', 'webhooks?page=' . $page . '&per_page=' . $perPage);
+            $response = $this->sendRequest('GET', 'webhooks?page=' . $page . '&per_page=' . $perPage, [], false);
 
             if (!isset($response['webhooks']) || !is_array($response['webhooks'])) {
                 return null;
@@ -123,7 +123,7 @@ class MonduClient
 
     public function registerWebhook($webhookParams)
     {
-        return $this->sendRequest('POST', 'webhooks/', $webhookParams);
+        return $this->sendRequest('POST', 'webhooks/', $webhookParams, false);
     }
 
     public function deleteWebhook($webhookParams)
@@ -140,8 +140,13 @@ class MonduClient
         }
     }
 
-    protected function sendRequest($method = 'GET', $url = '', $body = [])
+    /**
+     * @param bool $displayErrors false keeps the API error details out of the error box, they are only logged
+     */
+    protected function sendRequest($method = 'GET', $url = '', $body = [], bool $displayErrors = true)
     {
+        $this->_client->setDisplayErrors($displayErrors);
+
         try {
             $url = $this->_baseUrl . $url;
 

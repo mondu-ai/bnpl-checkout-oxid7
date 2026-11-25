@@ -28,6 +28,11 @@ class HttpRequest
      */
     private string $baseUrl;
 
+    /**
+     * show API error details in the admin/storefront error box
+     */
+    private bool $displayErrors = true;
+
     public function __construct(string $baseUrl, array $headers = ['Content-type' => 'application/json'])
     {
         $this->curl = curl_init();
@@ -118,6 +123,11 @@ class HttpRequest
         return $this->send_request($url, $data, 'DELETE');
     }
 
+    public function setDisplayErrors(bool $displayErrors): void
+    {
+        $this->displayErrors = $displayErrors;
+    }
+
     /**
      * For sending request
      *
@@ -146,7 +156,10 @@ class HttpRequest
         $response = curl_exec($this->curl);
         $httpCode = curl_getinfo($this->curl, CURLINFO_HTTP_CODE);
 
-        curl_close($this->curl);
+        // curl_close() has no effect since PHP 8.0 and is deprecated since PHP 8.5
+        if (PHP_VERSION_ID < 80000) {
+            curl_close($this->curl);
+        }
 
         if (!$response && $httpCode > 308) {
             throw new InvalidRequestException('[MONDU__ERROR] Request can not be processed.', $data);
@@ -158,9 +171,9 @@ class HttpRequest
             (isset($response['errors']) && $response['errors'] != null) ||
             (isset($response['error']) && $response['error'] != null)
         ) {
-            if ($response['errors']) {
+            if ($this->displayErrors && !empty($response['errors']) && is_array($response['errors'])) {
                 foreach ($response['errors'] as $error) {
-                    if ($error['details']) {
+                    if (!empty($error['details'])) {
                         Registry::get(UtilsView::class)->addErrorToDisplay(
                             oxNew(StandardException::class, ucfirst($error['details']))
                         );
