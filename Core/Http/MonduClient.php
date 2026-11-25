@@ -95,6 +95,32 @@ class MonduClient
         return $response['webhook_secret'];
     }
 
+    /**
+     * Returns all webhooks of the merchant, or null when the list can not be loaded.
+     */
+    public function getWebhooks(): ?array
+    {
+        $webhooks = [];
+        $perPage = 100;
+
+        for ($page = 1; $page <= 20; $page++) {
+            $response = $this->sendRequest('GET', 'webhooks?page=' . $page . '&per_page=' . $perPage);
+
+            if (!isset($response['webhooks']) || !is_array($response['webhooks'])) {
+                return null;
+            }
+
+            $webhooks = array_merge($webhooks, $response['webhooks']);
+            $total = $response['meta']['pagination']['total_amount'] ?? null;
+
+            if (count($response['webhooks']) < $perPage || ($total !== null && count($webhooks) >= $total)) {
+                break;
+            }
+        }
+
+        return $webhooks;
+    }
+
     public function registerWebhook($webhookParams)
     {
         return $this->sendRequest('POST', 'webhooks/', $webhookParams);

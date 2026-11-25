@@ -17,6 +17,8 @@ $aLang = array(
     'MONDU_CANCEL_ORDER_ERROR'           => 'This order can not be canceled by Mondu.',
     'MONDU_ADJUST_ORDER_ERROR'           => 'This order can not be adjusted by Mondu.',
     'MONDU_REGISTER_WEBHOOK_ERROR'       => 'Webhook can not be created by Mondu.',
+    'MONDU_WEBHOOKS_REGISTERED'          => 'Mondu webhooks have been registered.',
+    'MONDU_WEBHOOKS_ALREADY_REGISTERED'  => 'Mondu webhooks are already registered for this shop.',
     'MONDU_SENDING_PENDING_ORDER_ERROR'  => 'Can\'t ship order: Mondu order state must be confirmed or partially_shipped.',
 
     'ORDER_OVERVIEW_AUTHORIZED_NET_TERM' => 'Authorized Net term'

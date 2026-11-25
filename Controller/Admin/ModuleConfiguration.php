@@ -17,6 +17,8 @@ class ModuleConfiguration extends ModuleConfiguration_parent
 
     private MonduClient $_client;
 
+    private ?string $_monduWebhookNotice = null;
+
     public function saveConfVars()
     {
         $oldValues = $this->getCurrentConfigVariables();
@@ -84,18 +86,64 @@ class ModuleConfiguration extends ModuleConfiguration_parent
 
     public function registerWebhooks(): void
     {
+        $existingTopics = $this->getRegisteredTopics();
+        $registered = 0;
+
         foreach (self::REQUIRED_WEBHOOK_TOPICS as $webhookTopic) {
+            if (in_array($webhookTopic, $existingTopics, true)) {
+                continue;
+            }
+
             $webhookParams = oxNew(Webhook::class, $webhookTopic)->getData();
             $response = $this->_client->registerWebhook($webhookParams);
 
-            if ($response['status'] === 409) {
-                return;
+            if (!empty($response['webhook'])) {
+                $registered++;
+                continue;
             }
 
-            if (!$response['webhook'] && $response['status'] === 403) {
+            if (($response['status'] ?? null) === 403) {
                 MonduHelper::showErrorMessage('INVALID_API_KEY');
                 return;
             }
+
+            // The API error details are already shown by the HTTP client, add a message only when there are none.
+            if (empty($response['body']['errors'])) {
+                MonduHelper::showErrorMessage('MONDU_REGISTER_WEBHOOK_ERROR');
+            }
+
+            return;
         }
+
+        $this->_monduWebhookNotice = $registered > 0
+            ? 'MONDU_WEBHOOKS_REGISTERED'
+            : 'MONDU_WEBHOOKS_ALREADY_REGISTERED';
+    }
+
+    /**
+     * Topics already registered for this shop's webhook address.
+     */
+    private function getRegisteredTopics(): array
+    {
+        $webhooks = $this->_client->getWebhooks();
+        if ($webhooks === null) {
+            return [];
+        }
+
+        $address = oxNew(Webhook::class, '')->getAddress();
+        $topics = [];
+
+        foreach ($webhooks as $webhook) {
+            if (($webhook['address'] ?? null) === $address && isset($webhook['topic'])) {
+                $topics[] = $webhook['topic'];
+            }
+        }
+
+        return $topics;
+    }
+
+    public function getMonduWebhookNotice(): ?string
+    {
+        return $this->_monduWebhookNotice;
     }
 }
