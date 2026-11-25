@@ -45,7 +45,7 @@ composer require mondu/bnpl-checkout-oxid7
 
     > NOTE: In case any issues happen during module configuration, a proper error message will be shown.
 
-    > NOTE: When a new API key is saved, the module registers the Mondu webhooks for the shop address the admin is opened on (`<shop address>?cl=oemonduwebhooks`). Open the admin on the shop's public domain when you save the key. Webhooks that already exist for this address (also with http/https or with/without `www.`) are not registered again.
+    > NOTE: When a new API key is saved, the module registers the Mondu webhooks for the shop address the admin is opened on (`<shop address>?cl=oemonduwebhooks`). Open the admin on the shop's public domain when you save the key. Webhooks that already exist for exactly this address are not registered again. A webhook on another variant of the address (http instead of https, with or without `www.`) does not count, the module registers the exact address.
 
 6. Assign desired countries to Mondu Payment methods (_Admin Dashboard -> Shop Settings -> Payment Methods -> `<desired Mondu payment method>` -> Country -> Assign Countries_)
 

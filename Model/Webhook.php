@@ -24,13 +24,16 @@ class Webhook
     }
 
     /**
-     * Address without scheme and "www.", so that http/https and www/non-www variants of the shop match.
+     * Mondu treats a webhook as a duplicate only on the exact address. Scheme and host are case-insensitive
+     * in a URL, so only those are lowercased; http/https and www variants stay different addresses.
      */
     public static function normalizeAddress(string $address): string
     {
-        $address = strtolower(trim($address));
-        $address = preg_replace('#^https?://#', '', $address);
-        $address = preg_replace('#^www\.#', '', $address);
+        $address = trim($address);
+
+        if (preg_match('#^([a-z][a-z0-9+.-]*://)([^/?\#]*)(.*)$#is', $address, $parts)) {
+            return strtolower($parts[1]) . strtolower($parts[2]) . $parts[3];
+        }
 
         return $address;
     }
