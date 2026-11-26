@@ -17,6 +17,8 @@ $aLang = array(
     'MONDU_CANCEL_ORDER_ERROR'           => 'Deze bestelling kan niet door Mondu worden geannuleerd.',
     'MONDU_ADJUST_ORDER_ERROR'           => 'Deze bestelling kan niet worden aangepast door Mondu.',
     'MONDU_REGISTER_WEBHOOK_ERROR'       => 'Webhook kan niet door Mondu worden aangemaakt.',
+    'MONDU_WEBHOOKS_REGISTERED'          => 'Mondu-webhooks zijn geregistreerd.',
+    'MONDU_WEBHOOKS_ALREADY_REGISTERED'  => 'Mondu-webhooks zijn al geregistreerd voor deze shop.',
     'MONDU_SENDING_PENDING_ORDER_ERROR'  => 'Kan bestelling niet verzenden: Mondu-bestellingsstatus moet worden bevestigd of gedeeltelijk worden verzonden.',
 
     'ORDER_OVERVIEW_AUTHORIZED_NET_TERM' => 'Geautoriseerde Netto termijn'

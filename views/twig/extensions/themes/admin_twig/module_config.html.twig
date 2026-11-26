@@ -1,0 +1,10 @@
+{% extends 'module_config.html.twig' %}
+
+{% block admin_module_config_form %}
+    {% if oModule.getInfo('id') == 'oemondu' and oView.getMonduWebhookNotice() %}
+        <div class="messagebox">
+            <p class="message">{{ translate({ ident: oView.getMonduWebhookNotice() }) }}</p>
+        </div>
+    {% endif %}
+    {{ parent() }}
+{% endblock %}
