@@ -50,7 +50,7 @@ class MonduHelper
             return [
                 'external_reference_id' => $article->getFieldData('oxid'),
                 'title' => $article->getFieldData('oxtitle'),
-                'net_price_per_item_cents' => round($a->getBasePrice()->getNettoPrice() * 100),
+                'net_price_per_item_cents' => (int) round($a->getBasePrice()->getNettoPrice() * 100),
                 'quantity' => (int) $a->getFieldData('oxamount')
             ];
         }, $orderArticles);

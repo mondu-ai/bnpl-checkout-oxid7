@@ -127,9 +127,13 @@ function loadOxidOrder(uuid: string): OxidOrder {
   };
 }
 
-async function placeMonduOrder(page: Page, options: { voucher?: string; afterMonduOrderCreated?: () => void } = {}) {
+async function placeMonduOrder(
+  page: Page,
+  options: { voucher?: string; afterMonduOrderCreated?: () => void; onPayment?: (page: Page) => Promise<void> } = {},
+) {
   const mondu = await captureMonduOrder(page, options.afterMonduOrderCreated);
   await goToOrderStep(page, PAYMENT_ID, {
+    onPayment: options.onPayment,
     onBasket: options.voucher
       ? async (basketPage) => {
           // the same request as the coupon form in the checkout sidebar of the Apex theme, with its CSRF token
@@ -185,7 +189,16 @@ test('order with payment fee, voucher and discount: Mondu gets the order total a
 }) => {
   setPaymentFee(2.5);
   setDiscountActive(true);
-  const uuid = await placeMonduOrder(page, { voucher: newVoucherCode() });
+  const uuid = await placeMonduOrder(page, {
+    voucher: newVoucherCode(),
+    onPayment: async (paymentPage) => {
+      // the fee next to the Mondu payment method: 2,50 gross, or 2,10 net plus 0,40 VAT depending on the shop setting
+      const option = paymentPage.locator('.well', { has: paymentPage.locator(`#payment_${PAYMENT_ID}`) });
+      const text = (await option.innerText()).replace(/\s+/g, ' ');
+      expect(text).toMatch(/\(2,50 €\)|\(2,10 € [^()]+ 0,40 €\)/);
+      expect(text).not.toContain('1,00 €');
+    },
+  });
 
   const order = loadOxidOrder(uuid);
   expect(order.payment).toBe(250);

@@ -103,7 +103,7 @@ class MonduOrderMapper
             $lineItems[] = [
                 'external_reference_id' => $article->oxarticles__oxid->value,
                 'title' => $lineItem->getTitle(),
-                'net_price_per_item_cents' => round($lineItem->getUnitPrice()->getNettoPrice() * 100),
+                'net_price_per_item_cents' => (int) round($lineItem->getUnitPrice()->getNettoPrice() * 100),
                 'quantity' => (int) $lineItem->getAmount()
             ];
         }

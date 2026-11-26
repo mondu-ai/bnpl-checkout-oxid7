@@ -21,14 +21,15 @@
 
                     {% if paymentmethod.getPrice() and paymentmethod.oxpayments__oxaddsum.rawValue != 0 %}
                         {% set oPaymentPrice = paymentmethod.getPrice() %}
+                        <span class="monduPaymentPrice">
                         {% if oViewConf.isFunctionalityEnabled('blShowVATForPayCharge') %}
-                            ({{ format_price({ price: oPaymentPrice.getNettoPrice(), currency: currency }) }}
-                            {% if oPaymentPrice.getVatValue() > 0 %}
-                                {{ translate({ ident: "PLUS_VAT" }) }} {{ format_price({ price: oPaymentPrice.getVatValue(), currency: currency }) }})
-                            {% endif %}
+                            ({{ format_price(oPaymentPrice.getNettoPrice(), { currency: currency }) }}
+                            {%- if oPaymentPrice.getVatValue() > 0 %} {{ translate({ ident: "PLUS_VAT" }) }} {{ format_price(oPaymentPrice.getVatValue(), { currency: currency }) }}{% endif -%}
+                            )
                         {% else %}
-                            ({{ format_price({ price: oPaymentPrice.getBruttoPrice(), currency: currency }) }})
+                            ({{ format_price(oPaymentPrice.getBruttoPrice(), { currency: currency }) }})
                         {% endif %}
+                        </span>
                     {% endif %}
 
                     {% for value in paymentmethod.getDynValues() %}

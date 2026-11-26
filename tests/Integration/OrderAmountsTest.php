@@ -280,6 +280,37 @@ class OrderAmountsTest extends TestCase
         }
     }
 
+    /**
+     * The order from the bug report: "Ocean Eyes" (106.50 EUR), a 2.00 EUR coupon, 10.00 EUR shipping and a
+     * 5.00 EUR payment fee, 119.50 EUR in total. The old plugin sent 114.50 EUR without the fee and the coupon.
+     * The shipping depends on the shipping rules of the shop (the demo data can pick 0 or 10 EUR).
+     */
+    public function testReportedOrderWithCouponShippingAndPaymentFee(): void
+    {
+        $basket = $this->createBasket([
+            'article' => '22e135eb03a3aa69198ae30762ee785c',
+            'fee' => 5.0,
+            'voucher' => true,
+            'voucherAmount' => 2.0,
+        ]);
+        $shipping = (int) round($basket->getDeliveryCost()->getBruttoPrice() * 100);
+        $total = 10950 + $shipping;
+        $this->assertSame($total, (int) round($basket->getPrice()->getBruttoPrice() * 100), 'OXID total');
+
+        $mapper = oxNew(MonduOrderMapper::class);
+        $mapper->setBasket($basket);
+        $payload = $mapper->getMappedOrderData('invoice');
+        $line = $payload['lines'][0];
+
+        $this->assertSame($total, $payload['gross_amount_cents']);
+        $this->assertSame(8950, $line['line_items'][0]['net_price_per_item_cents']);
+        $this->assertSame(1668, $line['tax_cents']);
+        $this->assertSame(168, $line['discount_cents'], 'the 2.00 EUR coupon, net');
+        $this->assertSame($shipping, $line['shipping_price_cents']);
+        $this->assertSame(500, $line['buyer_fee_cents'], 'the 5.00 EUR payment fee');
+        $this->assertSame($total, self::monduAmount($line));
+    }
+
     private static function monduAmount(array $line): int
     {
         $net = 0;
@@ -315,6 +346,7 @@ class OrderAmountsTest extends TestCase
         $options += [
             'fee' => 0.0, 'voucher' => false, 'discount' => null, 'quantity' => 1, 'second' => false,
             'wrapping' => false, 'card' => false, 'netto' => false, 'vatOnTop' => false, 'currency' => null,
+            'article' => self::articleId(), 'voucherAmount' => 5.0,
         ];
 
         $db = DatabaseProvider::getDb();
@@ -351,7 +383,7 @@ class OrderAmountsTest extends TestCase
         $basket = oxNew(Basket::class);
         Registry::getSession()->setBasket($basket);
         $basket->setBasketUser($user);
-        $basket->addToBasket(self::articleId(), $options['quantity']);
+        $basket->addToBasket($options['article'], $options['quantity']);
         if ($options['second'] || $options['discount'] === 'bundle') {
             $second = self::secondArticleId();
             if (!array_key_exists($second, self::$vatBackup)) {
@@ -376,6 +408,7 @@ class OrderAmountsTest extends TestCase
             $basket->setCardId(self::CARD_ID);
         }
         if ($options['voucher']) {
+            $db->execute('update oxvoucherseries set oxdiscount = ? where oxid = ?', [$options['voucherAmount'], self::VOUCHER_SERIES_ID]);
             $code = 'MONDUAMOUNTS' . strtoupper(substr(md5(uniqid('', true)), 0, 8));
             $db->execute(
                 "insert into oxvouchers (oxid, oxvouchernr, oxvoucherserieid) values (?, ?, ?)",

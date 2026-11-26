@@ -19,6 +19,8 @@ type OrderStepOptions = {
   extra?: Record<string, string>;
   // runs after the article is in the basket, before the checkout steps
   onBasket?: (page: Page) => Promise<void>;
+  // runs on the payment step, after the payment method is selected
+  onPayment?: (page: Page) => Promise<void>;
 };
 
 export async function goToOrderStep(page: Page, paymentId: string, options: OrderStepOptions = {}) {
@@ -45,6 +47,7 @@ export async function goToOrderStep(page: Page, paymentId: string, options: Orde
   await page.waitForURL(/cl=payment/);
 
   await page.check(`#payment_${paymentId}`);
+  if (options.onPayment) await options.onPayment(page);
   await page.getByRole('button', { name: 'Weiter', exact: true }).click();
   await page.waitForURL(/cl=order/);
 
