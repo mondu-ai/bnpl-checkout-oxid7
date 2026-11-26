@@ -1,11 +1,13 @@
 # Integration tests
 
 PHPUnit tests that run inside an installed OXID 7 shop with this module and the demo data. They build real
-OXID baskets and orders (shipping, payment fee, voucher, discount, two VAT rates) and check that the
-Mondu payload adds up to the OXID total, and how the Mondu order is synced when OXID places the order.
+OXID baskets and orders and check that the Mondu payload adds up to the OXID total: shipping, payment fee,
+voucher, percent, absolute and article discounts, free bundle article, gift wrapping and greeting card, two VAT
+rates, net prices (B2B), costs with VAT on top and another currency. They also cover how the Mondu order is
+synced or canceled when the buyer comes back from the hosted checkout.
 
-The tests change shop data (payment costs, a voucher series, a discount, a test user, VAT of one article)
-and restore it. Use a test shop.
+The tests change shop data (payment costs, a voucher series, discounts, wrappings, a test user, the VAT of
+one article) and restore it. Use a test shop.
 
 ```bash
 # in this repository

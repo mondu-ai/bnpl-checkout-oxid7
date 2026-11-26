@@ -9,9 +9,9 @@ use OxidEsales\MonduPayment\Core\Http\MonduClient;
 use PHPUnit\Framework\TestCase;
 
 /**
- * OrderController::syncMonduOrderAmount() after the buyer comes back from the hosted checkout, with a Mondu
- * client that answers like the API would. The Mondu sandbox accepts every adjustment, so the declined case
- * can only be tested this way.
+ * OrderController::syncMonduOrderAmount() and cancelUnplacedMonduOrder() after the buyer comes back from the
+ * hosted checkout, with a Mondu client that answers like the API would. The Mondu sandbox accepts every
+ * adjustment, so the declined case can only be tested this way.
  *
  * Needs an OXID 7 shop with this module, see tests/Integration/README.md.
  */
@@ -103,6 +103,32 @@ class SyncMonduOrderAmountTest extends TestCase
         $this->assertSame('ORDERFOLDER_NEW', $this->folder());
     }
 
+    public function testAnUnplacedOrderCancelsTheMonduOrder(): void
+    {
+        $client = $this->client([]);
+        $this->callController($client, 'cancelUnplacedMonduOrder', 'unplaced-order-uuid', Order::ORDER_STATE_INVALIDPAYMENT);
+
+        $this->assertSame(['unplaced-order-uuid'], $client->cancellations);
+    }
+
+    public function testTheMonduOrderIsNotCanceledWhenAnOxidOrderExistsForIt(): void
+    {
+        $uuid = 'stored-order-uuid-' . uniqid();
+        DatabaseProvider::getDb()->execute(
+            "insert into oemondu_orders (oxid, oxid_order_id, order_uuid, order_state) values (?, ?, ?, 'authorized')",
+            [md5($uuid), $this->orderId, $uuid]
+        );
+
+        try {
+            $client = $this->client([]);
+            $this->callController($client, 'cancelUnplacedMonduOrder', $uuid, Order::ORDER_STATE_ORDEREXISTS);
+
+            $this->assertSame([], $client->cancellations);
+        } finally {
+            DatabaseProvider::getDb()->execute('delete from oemondu_orders where order_uuid = ?', [$uuid]);
+        }
+    }
+
     /**
      * @param array<int|null> $monduAmounts real_price_cents of each GET of the Mondu order, null for a failed request
      */
@@ -110,6 +136,7 @@ class SyncMonduOrderAmountTest extends TestCase
     {
         return new class ($monduAmounts) extends MonduClient {
             public array $adjustments = [];
+            public array $cancellations = [];
 
             public function __construct(private array $monduAmounts)
             {
@@ -120,6 +147,13 @@ class SyncMonduOrderAmountTest extends TestCase
                 $amount = array_shift($this->monduAmounts);
 
                 return $amount === null ? null : ['uuid' => $orderUuid, 'real_price_cents' => $amount];
+            }
+
+            public function cancelOrder($orderUuid)
+            {
+                $this->cancellations[] = $orderUuid;
+
+                return ['uuid' => $orderUuid, 'state' => 'canceled'];
             }
 
             public function adjustOrder($orderUuid, $data = [])
@@ -133,10 +167,15 @@ class SyncMonduOrderAmountTest extends TestCase
 
     private function sync(MonduClient $client): void
     {
+        $this->callController($client, 'syncMonduOrderAmount', $this->orderId, 'test-order-uuid');
+    }
+
+    private function callController(MonduClient $client, string $method, ...$arguments): void
+    {
         $controller = oxNew(OrderController::class);
         $class = new \ReflectionClass(\OxidEsales\MonduPayment\Controller\OrderController::class);
         $class->getProperty('_client')->setValue($controller, $client);
-        $class->getMethod('syncMonduOrderAmount')->invoke($controller, $this->orderId, 'test-order-uuid');
+        $class->getMethod($method)->invoke($controller, ...$arguments);
     }
 
     private function folder(): string

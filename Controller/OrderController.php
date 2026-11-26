@@ -106,12 +106,40 @@ class OrderController extends OrderController_parent
         if ($iSuccess === 1) {
             // performing special actions after user finishes order (assignment to special user groups)
             $this->_oUser->onOrderExecute($oBasket, $iSuccess);
+        }
+
+        if ($oBasket->getOrderId()) {
+            // the order is stored (also when only the order mail failed)
             $this->syncMonduOrderAmount($oBasket->getOrderId(), $orderUuid);
+        } elseif ($iSuccess !== Order::ORDER_STATE_ORDEREXISTS) {
+            $this->cancelUnplacedMonduOrder($orderUuid, $iSuccess);
         }
 
         $this->confirmOrder($oBasket, $orderUuid);
 
         return $iSuccess;
+    }
+
+    /**
+     * OXID did not place the order after the buyer authorized the payment on the hosted checkout (for example the
+     * payment method or the shipping is not valid any more). The authorized Mondu order would stay open without an
+     * OXID order, so it is canceled. The buyer gets the OXID error and can order again.
+     */
+    protected function cancelUnplacedMonduOrder($orderUuid, $orderState): void
+    {
+        // an OXID order for this Mondu order exists already, e.g. the buyer came back twice
+        $stored = DatabaseProvider::getDb()->getOne(
+            'SELECT 1 FROM oemondu_orders WHERE order_uuid = ?',
+            [$orderUuid]
+        );
+        if ($stored) {
+            return;
+        }
+
+        $this->_client->cancelOrder($orderUuid);
+        $this->_logger->warning(
+            "MonduOrderController [cancelUnplacedMonduOrder]: OXID did not place the order (state {$orderState}), Mondu order {$orderUuid} canceled"
+        );
     }
 
     /**

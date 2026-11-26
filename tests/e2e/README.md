@@ -20,6 +20,8 @@ Playwright end-to-end check of the Mondu checkout in the OXID storefront.
 4. Shipping gets more expensive while the buyer is on the hosted checkout: the Mondu order is adjusted, or
    the OXID order is moved to the problems folder with a warning in the admin.
 5. The admin order overview warns when the Mondu order and the OXID order differ.
+6. OXID does not place the order after the hosted checkout (the payment method was switched off meanwhile):
+   the Mondu order is canceled.
 
 ## Preconditions on the target shop
 

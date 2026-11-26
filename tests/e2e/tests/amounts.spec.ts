@@ -259,3 +259,31 @@ test('the admin warns when the Mondu order does not match the OXID order', async
   await expect(warning).toContainText(euro(order.total));
   await expect(warning).toContainText(euro(changedTotal));
 });
+
+test('OXID does not place the order after the hosted checkout: the Mondu order is canceled', async ({ page, request }) => {
+  // the Mondu payment method is switched off while the buyer is on the hosted checkout, so OXID refuses the order
+  const restore = sql(`select oxactive from oxpayments where oxid = '${PAYMENT_ID}'`);
+  const mondu = await captureMonduOrder(page, () => {
+    sql(`update oxpayments set oxactive = 0 where oxid = '${PAYMENT_ID}'`);
+  });
+
+  try {
+    await goToOrderStep(page, PAYMENT_ID);
+    await submitOrder(page);
+    await page.waitForURL('**mondu.ai/**', { timeout: 60_000 });
+    const confirmButton = page.getByRole('button', { name: /zahlen mit|pay with|bestätigen|confirm|submit/i }).first();
+    await confirmButton.waitFor({ state: 'visible', timeout: 30_000 });
+    await confirmButton.click({ force: true });
+
+    // back in the shop, but not on the thank-you page
+    await page.waitForURL((url) => !url.hostname.includes('mondu.ai'), { timeout: 90_000 });
+    await page.waitForLoadState('networkidle');
+    expect(page.url()).not.toContain('cl=thankyou');
+  } finally {
+    sql(`update oxpayments set oxactive = ${Number(restore)} where oxid = '${PAYMENT_ID}'`);
+  }
+
+  expect(mondu.uuid).toMatch(/^[0-9a-f-]{36}$/);
+  expect(sql(`select count(*) from oemondu_orders where order_uuid = ${quote(mondu.uuid)}`), 'no OXID order').toBe('0');
+  expect((await getMonduOrder(request, mondu.uuid)).state).toBe('canceled');
+});
