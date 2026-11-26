@@ -2,26 +2,13 @@
 
 ### Installation
 
-##### Manual installation
-
-1. Switch to the shop modules directory (`<shop_directory>/source/modules`)
-
-2. Create `mondu/bnpl-checkout-oxid` directory inside modules directory
-
-3. Download the latest plugin release zip file from [Releases](https://github.com/mondu-ai/bnpl-checkout-oxid7/releases)
-
-4. Copy unzipped content to `<shop_directory>/source/modules/mondu/bnpl-checkout-oxid`
-
-    > NOTE: After this step, you should be able to see all module code inside of this directory
-
-5. Navigate back to root directory of shop (`shop_directory`)
-6. Register module package in project composer.json (in root directory of shop). Composer installs the module and its configuration, no separate install command is needed
+Run in the root directory of the shop:
 
 ```
-composer config repositories.mondu/bnpl-checkout-oxid7 path source/modules/mondu/bnpl-checkout-oxid
-
 composer require mondu/bnpl-checkout-oxid7
 ```
+
+Composer installs the module and its configuration, no separate install command is needed.
 
 ### Module configuration
 
