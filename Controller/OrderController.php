@@ -13,6 +13,7 @@ use OxidEsales\Eshop\Core\Registry;
 use OxidEsales\Eshop\Core\Request;
 use OxidEsales\Eshop\Core\UtilsView;
 use OxidEsales\MonduPayment\Core\Http\MonduClient;
+use OxidEsales\MonduPayment\Core\Mappers\MonduAdjustmentMapper;
 use OxidEsales\MonduPayment\Core\Utils\MonduHelper;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Config\Definition\Exception\Exception;
@@ -105,11 +106,63 @@ class OrderController extends OrderController_parent
         if ($iSuccess === 1) {
             // performing special actions after user finishes order (assignment to special user groups)
             $this->_oUser->onOrderExecute($oBasket, $iSuccess);
+            $this->syncMonduOrderAmount($oBasket->getOrderId(), $orderUuid);
         }
 
         $this->confirmOrder($oBasket, $orderUuid);
 
         return $iSuccess;
+    }
+
+    /**
+     * The Mondu order is created from the basket before the buyer goes to the hosted checkout. OXID recalculates
+     * the basket when the order is placed, so shipping, discounts or costs can differ from what Mondu has.
+     * If they do, the Mondu order is adjusted to the OXID order. If Mondu does not accept the adjustment,
+     * the order is moved to the problems folder so that the merchant sees it before invoicing.
+     */
+    protected function syncMonduOrderAmount($orderId, $orderUuid): void
+    {
+        if (!$orderId || !$orderUuid) {
+            return;
+        }
+
+        $order = oxNew(Order::class);
+        if (!$order->load($orderId)) {
+            return;
+        }
+
+        $monduOrder = $this->_client->getMonduOrder($orderUuid);
+        if (!$monduOrder || !isset($monduOrder['real_price_cents'])) {
+            return;
+        }
+
+        $adjustmentMapper = oxNew(MonduAdjustmentMapper::class);
+        $oxidAmount = $adjustmentMapper->getOrderAmounts($order)['gross_amount_cents'];
+        $monduAmount = (int) $monduOrder['real_price_cents'];
+
+        if ($oxidAmount === $monduAmount) {
+            return;
+        }
+
+        $this->_client->adjustOrder($orderUuid, $adjustmentMapper->getMappedOrderData($order));
+
+        // the adjust response does not carry the recalculated amount, read the order again
+        $adjusted = $this->_client->getMonduOrder($orderUuid);
+        if ($adjusted && (int) ($adjusted['real_price_cents'] ?? -1) === $oxidAmount) {
+            $this->_logger->info(
+                "MonduOrderController [syncMonduOrderAmount]: order {$orderUuid} adjusted from {$monduAmount} to {$oxidAmount} cents"
+            );
+            return;
+        }
+
+        $this->_logger->error(
+            "MonduOrderController [syncMonduOrderAmount]: Mondu order {$orderUuid} has {$monduAmount} cents, "
+            . "OXID order {$order->getFieldData('oxorder__oxordernr')} has {$oxidAmount} cents, the adjustment was not accepted"
+        );
+        DatabaseProvider::getDb()->execute(
+            "UPDATE oxorder SET oxfolder = 'ORDERFOLDER_PROBLEMS' WHERE oxid = ?",
+            [$orderId]
+        );
     }
 
     /**

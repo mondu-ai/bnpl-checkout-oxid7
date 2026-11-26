@@ -17,6 +17,7 @@ $aLang = array(
     'MONDU_CANCEL_ORDER_ERROR'           => 'Die Bestellung kann durch Mondu nicht storniert werden.',
     'MONDU_ADJUST_ORDER_ERROR'           => 'Die Bestellung kann durch Mondu nicht angepasst werden.',
     'MONDU_REGISTER_WEBHOOK_ERROR'       => 'Webhook kann nicht durch Mondu erstellt werden.',
+    'MONDU_AMOUNT_MISMATCH'              => 'Der Betrag der Mondu-Bestellung (%s) weicht von dieser Bestellung (%s) ab. Mondu lehnt eine Rechnung mit einem höheren Betrag ab. Bitte kontaktieren Sie den Mondu Support.',
     'MONDU_WEBHOOKS_REGISTERED'          => 'Mondu-Webhooks wurden registriert.',
     'MONDU_WEBHOOKS_ALREADY_REGISTERED'  => 'Mondu-Webhooks sind für diesen Shop bereits registriert.',
     'MONDU_SENDING_PENDING_ORDER_ERROR'  => 'Bestellung kann nicht versendet werden: Der Status der Mondu-Bestellung muss bestätigt oder teilweise versandt sein.',

@@ -1,0 +1,261 @@
+import { test, expect, Page, APIRequestContext } from '@playwright/test';
+import {
+  adminLogin,
+  captureMonduOrder,
+  confirmHostedCheckout,
+  dbConfigured,
+  getMonduInvoices,
+  getMonduOrder,
+  goToOrderStep,
+  monduApiKey,
+  openOrderOverview,
+  quote,
+  shipOrderInAdmin,
+  sql,
+  submitOrder,
+} from './helpers';
+
+/**
+ * The Mondu order must have the same amount as the OXID order, with shipping, payment fees, vouchers and
+ * discounts, also when OXID calculates the order differently after the buyer comes back from the hosted
+ * checkout. Otherwise Mondu rejects the invoice.
+ *
+ * Needs the shop database (E2E_DB_NAME) to set up shipping, fees, vouchers and discounts, the sandbox API key
+ * of the shop (E2E_MONDU_API_KEY) and the admin login (E2E_ADMIN_USER / E2E_ADMIN_PASSWORD).
+ */
+
+test.describe.configure({ mode: 'serial' });
+test.skip(!dbConfigured || !monduApiKey || !process.env.E2E_ADMIN_PASSWORD, 'needs E2E_DB_NAME, E2E_MONDU_API_KEY and E2E_ADMIN_PASSWORD');
+
+const PAYMENT_ID = 'oxmondu_invoice';
+const DISCOUNT_ID = 'mondue2ediscount';
+const SERIES_ID = 'mondue2eseries';
+const backup: Record<string, string> = {};
+
+function setShipping(amount: number) {
+  sql(`update oxdelivery set oxaddsum = ${amount} where oxid = ${quote(backup.standardId)}`);
+}
+
+function setPaymentFee(amount: number) {
+  sql(`update oxpayments set oxaddsum = ${amount}, oxaddsumtype = 'abs' where oxid = '${PAYMENT_ID}'`);
+}
+
+function setDiscountActive(active: boolean) {
+  sql(`update oxdiscount set oxactive = ${active ? 1 : 0} where oxid = '${DISCOUNT_ID}'`);
+}
+
+// OXID EE assigns discounts and voucher series to shops through mapping tables
+function assignToShop(table: 'oxdiscount' | 'oxvoucherseries', oxid: string) {
+  if (!sql(`show tables like '${table}2shop'`)) return;
+  sql(`insert ignore into ${table}2shop (oxshopid, oxmapobjectid) select 1, oxmapid from ${table} where oxid = ${quote(oxid)}`);
+}
+
+function removeFromShop(table: 'oxdiscount' | 'oxvoucherseries', oxid: string) {
+  if (!sql(`show tables like '${table}2shop'`)) return;
+  sql(`delete m from ${table}2shop m join ${table} t on t.oxmapid = m.oxmapobjectid where t.oxid = ${quote(oxid)}`);
+}
+
+function newVoucherCode(): string {
+  const code = `MONDUE2E${Date.now()}`;
+  sql(`insert into oxvouchers (oxid, oxvouchernr, oxvoucherserieid) values (md5(${quote(code)}), ${quote(code)}, '${SERIES_ID}')`);
+  return code;
+}
+
+test.beforeAll(() => {
+  // the invoice number is the OXID order number and must be unique per Mondu merchant; a sandbox merchant is
+  // often shared by several test shops, so continue the order numbers from a value no other shop uses
+  sql(`update oxcounters set oxcount = greatest(oxcount, ${Math.floor(Date.now() / 1000)}) where oxident = 'oxOrder'`);
+
+  // the demo data has two shipping rules of the same priority for the standard shipping set (0 and 10 EUR),
+  // OXID then picks one by chance; make the standard rule the only candidate
+  const [standardId, standardSum, expressId, expressSort] = sql(
+    `select s.oxid, s.oxaddsum, e.oxid, e.oxsort from oxdelivery s, oxdelivery e
+     where s.oxtitle = 'Standard' and e.oxtitle = 'Express'`,
+  ).split('\t');
+  Object.assign(backup, { standardId, standardSum, expressId, expressSort });
+  backup.paymentFee = sql(`select oxaddsum from oxpayments where oxid = '${PAYMENT_ID}'`);
+  sql(`update oxdelivery set oxsort = (select m from (select max(oxsort) + 1 m from oxdelivery) t) where oxid = ${quote(expressId)}`);
+
+  removeFromShop('oxdiscount', DISCOUNT_ID);
+  sql(`delete from oxdiscount where oxid = '${DISCOUNT_ID}'`);
+  sql(`insert into oxdiscount (oxid, oxshopid, oxactive, oxtitle, oxamount, oxamountto, oxpriceto, oxprice, oxaddsumtype, oxaddsum, oxsort)
+       select '${DISCOUNT_ID}', 1, 0, 'Mondu E2E 10%', 1, 999999, 999999, 0, '%', 10, max(oxsort) + 1 from oxdiscount`);
+  sql(`delete from oxvouchers where oxvoucherserieid = '${SERIES_ID}'`);
+  removeFromShop('oxvoucherseries', SERIES_ID);
+  sql(`delete from oxvoucherseries where oxid = '${SERIES_ID}'`);
+  sql(`insert into oxvoucherseries (oxid, oxshopid, oxserienr, oxdiscount, oxdiscounttype, oxbegindate, oxenddate,
+         oxallowsameseries, oxallowotherseries, oxallowuseanother, oxminimumvalue)
+       values ('${SERIES_ID}', 1, 'MONDUE2E', 5, 'absolute', '2020-01-01', '2099-01-01', 1, 1, 1, 0)`);
+  assignToShop('oxdiscount', DISCOUNT_ID);
+  assignToShop('oxvoucherseries', SERIES_ID);
+});
+
+test.afterAll(() => {
+  if (!backup.standardId) return;
+  setShipping(Number(backup.standardSum));
+  sql(`update oxdelivery set oxsort = ${Number(backup.expressSort)} where oxid = ${quote(backup.expressId)}`);
+  setPaymentFee(Number(backup.paymentFee));
+  removeFromShop('oxdiscount', DISCOUNT_ID);
+  sql(`delete from oxdiscount where oxid = '${DISCOUNT_ID}'`);
+  sql(`delete from oxvouchers where oxvoucherserieid = '${SERIES_ID}'`);
+  removeFromShop('oxvoucherseries', SERIES_ID);
+  sql(`delete from oxvoucherseries where oxid = '${SERIES_ID}'`);
+});
+
+test.beforeEach(() => {
+  setShipping(10);
+  setPaymentFee(0);
+  setDiscountActive(false);
+});
+
+type OxidOrder = { id: string; total: number; delivery: number; payment: number; voucher: number; discount: number; folder: string };
+
+function loadOxidOrder(uuid: string): OxidOrder {
+  const row = sql(
+    `select o.oxid, o.oxtotalordersum, o.oxdelcost, o.oxpaycost, o.oxvoucherdiscount, o.oxdiscount, o.oxfolder
+     from oxorder o join oemondu_orders m on m.oxid_order_id = o.oxid where m.order_uuid = ${quote(uuid)}`,
+  ).split('\t');
+  expect(row[0], `OXID order for Mondu order ${uuid}`).toBeTruthy();
+  return {
+    id: row[0],
+    total: Math.round(Number(row[1]) * 100),
+    delivery: Math.round(Number(row[2]) * 100),
+    payment: Math.round(Number(row[3]) * 100),
+    voucher: Math.round(Number(row[4]) * 100),
+    discount: Math.round(Number(row[5]) * 100),
+    folder: row[6],
+  };
+}
+
+async function placeMonduOrder(page: Page, options: { voucher?: string; afterMonduOrderCreated?: () => void } = {}) {
+  const mondu = await captureMonduOrder(page, options.afterMonduOrderCreated);
+  await goToOrderStep(page, PAYMENT_ID, {
+    onBasket: options.voucher
+      ? async (basketPage) => {
+          // the same request as the coupon form in the checkout sidebar of the Apex theme, with its CSRF token
+          const stoken = await basketPage.locator('input[name="stoken"]').first().inputValue();
+          await basketPage.goto(
+            `/index.php?cl=basket&fnc=addVoucher&stoken=${stoken}&voucherNr=${encodeURIComponent(options.voucher!)}`,
+          );
+        }
+      : undefined,
+  });
+  if (options.voucher) {
+    await expect(page.getByText(`(${options.voucher})`).first(), 'voucher applied').toBeVisible();
+  }
+  await submitOrder(page);
+  await confirmHostedCheckout(page);
+  expect(mondu.uuid).toMatch(/^[0-9a-f-]{36}$/);
+  return mondu.uuid;
+}
+
+/** Ships the order in the OXID admin and checks that Mondu accepted the invoice with the order total. */
+async function expectInvoiceAccepted(page: Page, request: APIRequestContext, uuid: string, order: OxidOrder) {
+  const admin = await adminLogin(page);
+  await openOrderOverview(page, admin, order.id);
+  await expect(page.locator('.errorbox')).toHaveCount(0);
+
+  await shipOrderInAdmin(page, admin, order.id);
+  await expect(page.locator('.errorbox')).toHaveCount(0);
+
+  const invoices = await getMonduInvoices(request, uuid);
+  expect(invoices, 'Mondu invoices').toHaveLength(1);
+  expect(invoices[0].gross_amount_cents).toBe(order.total);
+  expect(sql(`select count(*) from oemondu_invoices where invoice_id = (select oxordernr from oxorder where oxid = ${quote(order.id)})`)).toBe('1');
+  expect((await getMonduOrder(request, uuid)).state).toBe('shipped');
+}
+
+test('order with shipping costs: Mondu gets the full order total and accepts the invoice', async ({ page, request }) => {
+  const uuid = await placeMonduOrder(page);
+
+  const order = loadOxidOrder(uuid);
+  expect(order.delivery).toBe(1000);
+  const monduOrder = await getMonduOrder(request, uuid);
+  expect(monduOrder.real_price_cents).toBe(order.total);
+  expect(monduOrder.lines[0].shipping_price_cents).toBe(1000);
+  expect(monduOrder.adjusted, 'no adjustment needed').toBe(false);
+  expect(order.folder).toBe('ORDERFOLDER_NEW');
+
+  await expectInvoiceAccepted(page, request, uuid, order);
+});
+
+test('order with payment fee, voucher and discount: Mondu gets the order total and accepts the invoice', async ({
+  page,
+  request,
+}) => {
+  setPaymentFee(2.5);
+  setDiscountActive(true);
+  const uuid = await placeMonduOrder(page, { voucher: newVoucherCode() });
+
+  const order = loadOxidOrder(uuid);
+  expect(order.payment).toBe(250);
+  expect(order.voucher).toBe(500);
+  expect(order.discount).toBeGreaterThan(0);
+  const monduOrder = await getMonduOrder(request, uuid);
+  expect(monduOrder.real_price_cents).toBe(order.total);
+  expect(monduOrder.lines[0].buyer_fee_cents).toBe(250);
+  expect(monduOrder.adjusted, 'no adjustment needed').toBe(false);
+  expect(order.folder).toBe('ORDERFOLDER_NEW');
+
+  await expectInvoiceAccepted(page, request, uuid, order);
+});
+
+test('shipping gets cheaper while the buyer is on the hosted checkout: the Mondu order is adjusted', async ({
+  page,
+  request,
+}) => {
+  const uuid = await placeMonduOrder(page, { afterMonduOrderCreated: () => setShipping(0) });
+
+  const order = loadOxidOrder(uuid);
+  expect(order.delivery).toBe(0);
+  const monduOrder = await getMonduOrder(request, uuid);
+  expect(monduOrder.real_price_cents, 'Mondu order adjusted to the OXID order').toBe(order.total);
+  expect(monduOrder.adjusted).toBe(true);
+  expect(order.folder, 'an adjusted order is not a problem').not.toBe('ORDERFOLDER_PROBLEMS');
+
+  await expectInvoiceAccepted(page, request, uuid, order);
+});
+
+test('shipping gets more expensive while the buyer is on the hosted checkout: adjusted or flagged', async ({
+  page,
+  request,
+}) => {
+  setShipping(0);
+  const uuid = await placeMonduOrder(page, { afterMonduOrderCreated: () => setShipping(10) });
+
+  const order = loadOxidOrder(uuid);
+  expect(order.delivery).toBe(1000);
+  const monduOrder = await getMonduOrder(request, uuid);
+
+  if (monduOrder.real_price_cents === order.total) {
+    // Mondu accepted the higher amount
+    expect(monduOrder.adjusted).toBe(true);
+    expect(order.folder, 'an adjusted order is not a problem').not.toBe('ORDERFOLDER_PROBLEMS');
+    await expectInvoiceAccepted(page, request, uuid, order);
+    return;
+  }
+
+  // Mondu did not accept it: the merchant must see it before invoicing
+  expect(order.folder).toBe('ORDERFOLDER_PROBLEMS');
+  const admin = await adminLogin(page);
+  await openOrderOverview(page, admin, order.id);
+  await expect(page.locator('.errorbox')).toContainText('Mondu');
+});
+
+test('the admin warns when the Mondu order does not match the OXID order', async ({ page, request }) => {
+  // Mondu sandbox accepts every adjustment, so the mismatch is made in the OXID order after it is placed
+  const uuid = await placeMonduOrder(page);
+  const order = loadOxidOrder(uuid);
+  expect((await getMonduOrder(request, uuid)).real_price_cents).toBe(order.total);
+
+  const changedTotal = order.total + 500;
+  sql(`update oxorder set oxdelcost = oxdelcost + 5, oxtotalordersum = ${changedTotal / 100} where oxid = ${quote(order.id)}`);
+
+  const admin = await adminLogin(page);
+  await openOrderOverview(page, admin, order.id);
+  const euro = (cents: number) => (cents / 100).toLocaleString('de-DE', { minimumFractionDigits: 2 });
+  const warning = page.locator('.errorbox');
+  await expect(warning).toContainText('Mondu');
+  await expect(warning).toContainText(euro(order.total));
+  await expect(warning).toContainText(euro(changedTotal));
+});

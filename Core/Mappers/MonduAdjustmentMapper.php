@@ -23,28 +23,56 @@ class MonduAdjustmentMapper
 
     public function getMappedOrderData($order)
     {
-        $tax = array_values($order->getProductVats(false))[0];
-        $discount = (float) $order->getFieldData('oxorder__oxdiscount');
-        $shipping = (float) $order->getFieldData('oxorder__oxdelcost');
+        $lineItems = $this->getOrderLineItems($order);
+        $amounts = $this->getOrderAmounts($order, $lineItems);
 
         $data = [
             "currency" => $order->getOrderCurrency()->name,
             "external_reference_id" => $order->getFieldData('oxorder__oxordernr') ? (string) $order->getFieldData('oxorder__oxordernr') : $order->getId(),
             "amount" => [
-                "net_price_cents" => round($order->getOrderNetSum() * 100),
-                "tax_cents" => round($tax * 100),
-                "gross_amount_cents" => round((float) $order->getFieldData('oxtotalordersum') * 100)
+                "net_price_cents" => $amounts['net_price_cents'],
+                "tax_cents" => $amounts['tax_cents'],
+                "gross_amount_cents" => $amounts['gross_amount_cents']
             ],
             "lines" => [[
-                "tax_cents" => round($tax * 100),
-                'buyer_fee_cents' => $this->buyerFeeCentsService->getBuyerFeeCentsFromOrder($order),
-                "shipping_price_cents" => round($shipping * 100),
-                "discount_cents" => round($discount * 100),
-                "line_items" => $this->getOrderLineItems($order)
+                "tax_cents" => $amounts['tax_cents'],
+                "buyer_fee_cents" => $amounts['buyer_fee_cents'],
+                "shipping_price_cents" => $amounts['shipping_price_cents'],
+                "discount_cents" => $amounts['discount_cents'],
+                "line_items" => $lineItems
             ]]
         ];
 
         return MonduHelper::removeEmptyElementsFromArray($data);
+    }
+
+    /**
+     * Amount fields of the Mondu order, built from the OXID order total so that they add up to it.
+     */
+    public function getOrderAmounts($order, ?array $lineItems = null): array
+    {
+        $lineItems = $lineItems ?? $this->getOrderLineItems($order);
+
+        $itemsNetCents = 0;
+        foreach ($lineItems as $lineItem) {
+            $itemsNetCents += (int) $lineItem['net_price_per_item_cents'] * (int) $lineItem['quantity'];
+        }
+
+        $fees = (float) $order->getFieldData('oxpaycost')
+            + (float) $order->getFieldData('oxwrapcost')
+            + (float) $order->getFieldData('oxgiftcardcost')
+            + ((int) $this->buyerFeeCentsService?->getBuyerFeeCentsFromOrder($order)) / 100;
+
+        $hasDiscount = (float) $order->getFieldData('oxdiscount') > 0 || (float) $order->getFieldData('oxvoucherdiscount') > 0;
+
+        return MonduAmountCalculator::calculate(
+            $itemsNetCents,
+            (float) array_sum($order->getProductVats(false)),
+            (float) $order->getFieldData('oxdelcost'),
+            $fees,
+            (float) $order->getFieldData('oxtotalordersum'),
+            $hasDiscount
+        );
     }
 
     protected function getOrderLineItems($order)
