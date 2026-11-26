@@ -121,7 +121,8 @@ class MonduOrderMapper
             "first_name" => $user->oxuser__oxfname->rawValue,
             "last_name" => $user->oxuser__oxlname->rawValue,
             "company_name" => $user->oxuser__oxcompany->rawValue,
-            "phone" => $user->oxuser__oxfon->rawValue
+            "phone" => $user->oxuser__oxfon->rawValue,
+            "vat_number" => trim((string) $user->oxuser__oxustid->rawValue)
         ];
     }
 

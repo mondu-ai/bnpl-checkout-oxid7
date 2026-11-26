@@ -11,8 +11,7 @@ Three payment methods: Invoice (`oxmondu_invoice`), SEPA Direct Debit (`oxmondu_
 ## Installation (in OXID shop context)
 
 ```bash
-# From shop root
-composer config repositories.mondu/bnpl-checkout-oxid7 path source/modules/mondu/bnpl-checkout-oxid
+# From shop root (package is on Packagist)
 composer require mondu/bnpl-checkout-oxid7
 ```
 
