@@ -2,3 +2,5 @@
 .prettierrc.json
 /.vscode/
 /vendor/
+/composer.lock
+/.phpunit.result.cache

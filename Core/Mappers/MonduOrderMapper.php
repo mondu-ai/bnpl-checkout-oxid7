@@ -55,9 +55,8 @@ class MonduOrderMapper
         $session = Registry::getSession();
         $basket = $this->getBasket();
         $monduOrderUuid = $session->getVariable('mondu_order_uuid');
-        $tax = array_values($basket->getProductVats(false))[0];
-        $discount = $basket->getTotalDiscount()->getPrice();
-        $shipping = $basket->getDeliveryCost()->getPrice();
+        $lineItems = $this->getOrderLineItems();
+        $amounts = $this->getBasketAmounts($basket, $lineItems);
         $shopUrl = Registry::getConfig()->getCurrentShopUrl();
 
         $oDelAdressMD5 = $this->getBasketUser()->getEncodedDeliveryAddress();
@@ -72,7 +71,7 @@ class MonduOrderMapper
             "currency" => $basket->getBasketCurrency()->name,
             "payment_method" => $paymentMethod,
             "external_reference_id" => $externalReferenceId,
-            "gross_amount_cents" => round($basket->getPriceForPayment() * 100),
+            "gross_amount_cents" => $amounts['gross_amount_cents'],
             "buyer" => MonduHelper::removeEmptyElementsFromArray($this->getBuyerData()),
             "billing_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserBillingAddress()),
             "shipping_address" => MonduHelper::removeEmptyElementsFromArray($this->getUserDeliveryAddress()),
@@ -81,15 +80,23 @@ class MonduOrderMapper
             "declined_url" => $shopUrl . '?cl=oemondudeclined',
             "state_flow" => 'authorization_flow',
             "lines" => [[
-                "tax_cents" => round($tax * 100),
-                "buyer_fee_cents" => $this->buyerFeeCentsService?->getBuyerFeeCentsFromBasked($basket),
-                "shipping_price_cents" => round($shipping * 100),
-                "discount_cents" => round($discount * 100),
-                "line_items" => $this->getOrderLineItems()
+                "tax_cents" => $amounts['tax_cents'],
+                "buyer_fee_cents" => $amounts['buyer_fee_cents'],
+                "shipping_price_cents" => $amounts['shipping_price_cents'],
+                "discount_cents" => $amounts['discount_cents'],
+                "line_items" => $lineItems
             ]]
         ];
 
         return MonduHelper::removeEmptyElementsFromArray($data);
+    }
+
+    /**
+     * Gross amount the Mondu order gets for the current state of the basket.
+     */
+    public function getBasketGrossAmountCents(): int
+    {
+        return $this->getBasketAmounts($this->getBasket(), $this->getOrderLineItems())['gross_amount_cents'];
     }
 
     protected function getOrderLineItems()
@@ -104,12 +111,44 @@ class MonduOrderMapper
             $lineItems[] = [
                 'external_reference_id' => $article->oxarticles__oxid->value,
                 'title' => $lineItem->getTitle(),
-                'net_price_per_item_cents' => round($lineItem->getUnitPrice()->getNettoPrice() * 100),
-                'quantity' => $lineItem->getAmount()
+                'net_price_per_item_cents' => (int) round($lineItem->getUnitPrice()->getNettoPrice() * 100),
+                'quantity' => (int) $lineItem->getAmount()
             ];
         }
 
         return $lineItems;
+    }
+
+    /**
+     * Amount fields of the Mondu order line, built from the basket total so that they add up to it.
+     */
+    protected function getBasketAmounts($basket, array $lineItems): array
+    {
+        $itemsNetCents = 0;
+        foreach ($lineItems as $lineItem) {
+            $itemsNetCents += (int) $lineItem['net_price_per_item_cents'] * (int) $lineItem['quantity'];
+        }
+
+        $fees = self::bruttoOf($basket->getPaymentCost())
+            + self::bruttoOf($basket->getWrappingCost())
+            + self::bruttoOf($basket->getGiftCardCost())
+            + ((int) $this->buyerFeeCentsService?->getBuyerFeeCentsFromBasked($basket)) / 100;
+
+        $hasDiscount = self::bruttoOf($basket->getTotalDiscount()) > 0 || self::bruttoOf($basket->getVoucherDiscount()) > 0;
+
+        return MonduAmountCalculator::calculate(
+            $itemsNetCents,
+            (float) array_sum($basket->getProductVats(false)),
+            self::bruttoOf($basket->getDeliveryCost()),
+            $fees,
+            self::bruttoOf($basket->getPrice()),
+            $hasDiscount
+        );
+    }
+
+    protected static function bruttoOf($price): float
+    {
+        return $price ? (float) $price->getBruttoPrice() : 0.0;
     }
 
     protected function getBuyerData()

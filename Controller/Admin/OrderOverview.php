@@ -2,6 +2,8 @@
 
 namespace OxidEsales\MonduPayment\Controller\Admin;
 
+use OxidEsales\MonduPayment\Core\Http\MonduClient;
+use OxidEsales\MonduPayment\Core\Mappers\MonduAdjustmentMapper;
 use OxidEsales\MonduPayment\Core\OrderShippingProcessor;
 use OxidEsales\MonduPayment\Core\Utils\MonduHelper;
 use OxidEsales\Eshop\Application\Model\Order;
@@ -24,6 +26,7 @@ class OrderOverview extends OrderOverview_parent
         if ($this->isMonduPayment()) {
             $monduOrder = array_values($this->_oOrder->getMonduOrders()->getArray())[0];
             $this->_aViewData["oemonduAuthorizedNetTerm"] = $monduOrder ? $monduOrder->getFieldData('authorized_net_term') : null;
+            $this->_aViewData["oemonduAmountMismatch"] = $monduOrder ? $this->getMonduAmountMismatch($monduOrder->getFieldData('order_uuid')) : null;
         }
 
         return parent::render();
@@ -41,10 +44,6 @@ class OrderOverview extends OrderOverview_parent
             return MonduHelper::showErrorMessage('MONDU_CREATE_INVOICE_ERROR');
         }
 
-        if ($this->isMonduPayment() && !$this->_monduShippingProcessor->shipMonduOrder()) {
-            return MonduHelper::showErrorMessage('MONDU_CREATE_INVOICE_ERROR');
-        }
-
         parent::sendorder();
     }
 
@@ -55,6 +54,36 @@ class OrderOverview extends OrderOverview_parent
         }
 
         return parent::resetorder();
+    }
+
+    /**
+     * Mondu and OXID amounts when the Mondu order does not match the OXID order total, null otherwise.
+     */
+    protected function getMonduAmountMismatch($orderUuid): ?array
+    {
+        if (!$orderUuid) {
+            return null;
+        }
+
+        $monduOrder = oxNew(MonduClient::class)->getMonduOrder($orderUuid);
+        if (!$monduOrder || !isset($monduOrder['real_price_cents'])) {
+            return null;
+        }
+
+        $oxidCents = oxNew(MonduAdjustmentMapper::class)->getOrderAmounts($this->_oOrder)['gross_amount_cents'];
+        $monduCents = (int) $monduOrder['real_price_cents'];
+
+        if ($oxidCents === $monduCents) {
+            return null;
+        }
+
+        $currency = $this->_oOrder->getOrderCurrency();
+        $lang = \OxidEsales\Eshop\Core\Registry::getLang();
+
+        return [
+            'mondu' => $lang->formatCurrency($monduCents / 100, $currency) . ' ' . $currency->name,
+            'oxid' => $lang->formatCurrency($oxidCents / 100, $currency) . ' ' . $currency->name,
+        ];
     }
 
     public function isMonduPayment()

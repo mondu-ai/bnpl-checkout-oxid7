@@ -17,9 +17,15 @@ composer require mondu/bnpl-checkout-oxid7
 
 Module is activated/deactivated via OXID admin: Extensions → Modules → Mondu.
 
-## No Build/Test/Lint Tools
+## Tests
 
-This project has no test suite, no linter, no CI/CD pipeline, and no build step. There is no `phpunit.xml`, `phpcs.xml`, `phpstan.neon`, Makefile, or GitHub Actions configuration.
+No linter, no CI/CD pipeline and no build step. Tests (`composer install` first, see `tests/Integration/README.md` and `tests/e2e/README.md`):
+
+- `vendor/bin/phpunit --testsuite unit`: pure PHP, no shop.
+- `vendor/bin/phpunit --testsuite integration`: inside an OXID 7 shop with the module, `OXID_BOOTSTRAP=<shop>/source/bootstrap.php`.
+- `tests/e2e`: Playwright against a running shop and the Mondu sandbox.
+
+Amounts sent to Mondu (order, adjustment) are built by `Core/Mappers/MonduAmountCalculator` so that the line adds up to the OXID total: Mondu computes `net items + tax - discount + shipping + buyer_fee`.
 
 ## Architecture
 

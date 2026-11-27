@@ -1,4 +1,5 @@
-import { test, expect, Page } from '@playwright/test';
+import { test, expect } from '@playwright/test';
+import { dbConfigured, goToOrderStep, makeShippingRulesUnambiguous, submitOrder } from './helpers';
 
 /**
  * The widget is sunset: the order confirm step must not load the Mondu widget
@@ -6,51 +7,13 @@ import { test, expect, Page } from '@playwright/test';
  * thank-you page, and other payment methods must still place orders normally.
  */
 
-const PRODUCT_ID = process.env.E2E_PRODUCT_ID ?? '066e3ce119c43c81cc0e46d4f1681eed';
-
-// Mondu sandbox authorizes this buyer automatically (company "Mondu GmbH", email ac.good.*).
-const BUYER = {
-  oxfname: 'Max',
-  oxlname: 'Mustermann',
-  oxcompany: process.env.E2E_BUYER_COMPANY ?? 'Mondu GmbH',
-  oxstreet: 'Strassmannstr.',
-  oxstreetnr: '45',
-  oxzip: '10122',
-  oxcity: 'Berlin',
-  oxfon: '+493031196513',
-};
-
-async function goToOrderStep(page: Page, paymentId: string, extra: Record<string, string> = {}) {
-  await page.goto(`/index.php?cl=details&anid=${PRODUCT_ID}`);
-  await page.click('#toBasket');
-  await page.waitForLoadState('networkidle');
-
-  // guest checkout
-  await page.goto('/index.php?cl=user');
-  await page.getByRole('button', { name: 'Bestellen ohne Registrierung' }).click();
-  await page.waitForLoadState('networkidle');
-
-  await page.fill('#userLoginName', `ac.good.${Date.now()}@example.com`);
-  for (const [field, value] of Object.entries({ ...BUYER, ...extra })) {
-    await page.fill(`[name="invadr[oxuser__${field}]"]`, value);
-  }
-  // the country select is wrapped by bootstrap-select, set the native value
-  await page.selectOption('#invCountrySelect', { label: 'Deutschland' });
-  await page.click('#userFormSubmit');
-  await page.waitForURL(/cl=payment/);
-
-  await page.check(`#payment_${paymentId}`);
-  await page.getByRole('button', { name: 'Weiter', exact: true }).click();
-  await page.waitForURL(/cl=order/);
-
-  const agb = page.locator('#checkAgbTop, #checkAgbBottom, input[name="ord_agb"]').first();
-  if (await agb.isVisible().catch(() => false)) await agb.check();
-}
-
-async function submitOrder(page: Page) {
-  // the Apex confirm button sits outside the #orderConfirmAgbBottom form
-  await page.getByRole('button', { name: 'Zahlungspflichtig bestellen' }).click();
-}
+// without the shop database the demo shipping rules stay as they are and a Mondu order can be sent back to the
+// order page because the shipping changed (see makeShippingRulesUnambiguous)
+let restoreShippingRules = () => {};
+test.beforeAll(() => {
+  if (dbConfigured) restoreShippingRules = makeShippingRulesUnambiguous();
+});
+test.afterAll(() => restoreShippingRules());
 
 test('Mondu order goes through hosted checkout without loading the widget SDK', async ({ page }) => {
   const widgetRequests: string[] = [];
@@ -93,7 +56,7 @@ test('non-Mondu payment still places the order without Mondu interception', asyn
 
 test('Mondu order with a VAT ID from the checkout goes through', async ({ page }) => {
   // the VAT ID is sent as buyer.vat_number; the API rejects the order if the payload is invalid
-  await goToOrderStep(page, 'oxmondu_invoice', { oxustid: 'DE123456789' });
+  await goToOrderStep(page, 'oxmondu_invoice', { extra: { oxustid: 'DE123456789' } });
   await submitOrder(page);
   await page.waitForURL('**mondu.ai/**', { timeout: 60_000 });
 

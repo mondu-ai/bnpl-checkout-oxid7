@@ -18,5 +18,6 @@ $aLang = [
     'MONDU_ERROR_MESSAGE_INVALID_CREDENTIALS' => 'Invalid Credentials',
     'MONDU_ERROR_MESSAGE_GENERAL' => 'An error occurred',
     'MONDU_PAYMENT_DESCRIPTION' => 'Pay conveniently by invoice with Mondu',
-    'MONDU_B2B_NOTICE' => 'Mondu is a B2B payment provider. Only available for business customers.'
+    'MONDU_B2B_NOTICE' => 'Mondu is a B2B payment provider. Only available for business customers.',
+    'MONDU_BASKET_CHANGED' => 'The total of your order has changed. Please check the order and confirm it again.'
 ]; 

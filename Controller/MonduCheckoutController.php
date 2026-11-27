@@ -11,6 +11,8 @@ use Psr\Log\LoggerInterface;
 
 class MonduCheckoutController extends \OxidEsales\Eshop\Application\Controller\FrontendController
 {
+    public const SESSION_ORDER_AMOUNT = 'mondu_order_amount';
+
     protected MonduClient $_client;
     protected MonduOrderMapper $_orderMapper;
     private LoggerInterface $_logger;
@@ -41,6 +43,11 @@ class MonduCheckoutController extends \OxidEsales\Eshop\Application\Controller\F
         if ($token !== 'error') {
             $session = Registry::getSession();
             $session->setVariable('mondu_order_uuid', $token);
+            // checked when the buyer comes back from the hosted checkout, see OrderController::hasMonduAmountChanged()
+            $session->setVariable(self::SESSION_ORDER_AMOUNT, [
+                'uuid' => $token,
+                'gross_amount_cents' => (int) ($orderData['gross_amount_cents'] ?? 0),
+            ]);
         }
 
         echo json_encode([

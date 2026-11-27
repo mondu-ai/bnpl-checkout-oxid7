@@ -1,0 +1,10 @@
+{% extends 'order_overview.html.twig' %}
+
+{% block admin_order_overview_total %}
+    {% if oemonduAmountMismatch %}
+        <div class="errorbox">
+            <p>{{ translate({ ident: "MONDU_AMOUNT_MISMATCH" })|format(oemonduAmountMismatch.mondu, oemonduAmountMismatch.oxid) }}</p>
+        </div>
+    {% endif %}
+    {{ parent() }}
+{% endblock %}

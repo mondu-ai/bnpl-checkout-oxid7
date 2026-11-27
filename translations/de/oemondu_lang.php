@@ -18,5 +18,6 @@ $aLang = [
     'MONDU_ERROR_MESSAGE_INVALID_CREDENTIALS' => 'Ungültige Anmeldedaten',
     'MONDU_ERROR_MESSAGE_GENERAL' => 'Ein Fehler ist aufgetreten',
     'MONDU_PAYMENT_DESCRIPTION' => 'Bezahlen Sie bequem auf Rechnung mit Mondu',
-    'MONDU_B2B_NOTICE' => 'Mondu ist ein B2B Zahlungsanbieter. Nur für gewerbliche Kunden verfügbar.'
+    'MONDU_B2B_NOTICE' => 'Mondu ist ein B2B Zahlungsanbieter. Nur für gewerbliche Kunden verfügbar.',
+    'MONDU_BASKET_CHANGED' => 'Der Gesamtbetrag Ihrer Bestellung hat sich geändert. Bitte prüfen Sie die Bestellung und bestätigen Sie sie erneut.'
 ]; 
