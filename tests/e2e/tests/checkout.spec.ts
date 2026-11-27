@@ -1,11 +1,19 @@
 import { test, expect } from '@playwright/test';
-import { goToOrderStep, submitOrder } from './helpers';
+import { dbConfigured, goToOrderStep, makeShippingRulesUnambiguous, submitOrder } from './helpers';
 
 /**
  * The widget is sunset: the order confirm step must not load the Mondu widget
  * SDK, a Mondu order must redirect to the hosted checkout and come back to the
  * thank-you page, and other payment methods must still place orders normally.
  */
+
+// without the shop database the demo shipping rules stay as they are and a Mondu order can be sent back to the
+// order page because the shipping changed (see makeShippingRulesUnambiguous)
+let restoreShippingRules = () => {};
+test.beforeAll(() => {
+  if (dbConfigured) restoreShippingRules = makeShippingRulesUnambiguous();
+});
+test.afterAll(() => restoreShippingRules());
 
 test('Mondu order goes through hosted checkout without loading the widget SDK', async ({ page }) => {
   const widgetRequests: string[] = [];

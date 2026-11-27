@@ -18,5 +18,6 @@ $aLang = [
     'MONDU_ERROR_MESSAGE_INVALID_CREDENTIALS' => 'Ongeldige Inloggegevens',
     'MONDU_ERROR_MESSAGE_GENERAL' => 'Er is een fout opgetreden',
     'MONDU_PAYMENT_DESCRIPTION' => 'Betaal gemakkelijk op factuur met Mondu',
-    'MONDU_B2B_NOTICE' => 'Mondu is een B2B betalingsprovider. Alleen beschikbaar voor zakelijke klanten.'
+    'MONDU_B2B_NOTICE' => 'Mondu is een B2B betalingsprovider. Alleen beschikbaar voor zakelijke klanten.',
+    'MONDU_BASKET_CHANGED' => 'Het totaalbedrag van uw bestelling is gewijzigd. Controleer de bestelling en bevestig deze opnieuw.'
 ]; 

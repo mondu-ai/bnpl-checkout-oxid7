@@ -2,11 +2,15 @@
 
 namespace OxidEsales\MonduPayment\Tests\Integration;
 
+use OxidEsales\Eshop\Application\Controller\OrderController;
 use OxidEsales\Eshop\Application\Model\Basket;
 use OxidEsales\Eshop\Application\Model\Order;
 use OxidEsales\Eshop\Application\Model\User;
 use OxidEsales\Eshop\Core\DatabaseProvider;
 use OxidEsales\Eshop\Core\Registry;
+use OxidEsales\MonduPayment\Controller\MonduCheckoutController;
+use OxidEsales\MonduPayment\Controller\OrderController as MonduOrderController;
+use OxidEsales\MonduPayment\Core\Http\MonduClient;
 use OxidEsales\MonduPayment\Core\Mappers\MonduAdjustmentMapper;
 use OxidEsales\MonduPayment\Core\Mappers\MonduOrderMapper;
 use PHPUnit\Framework\Attributes\DataProvider;
@@ -309,6 +313,62 @@ class OrderAmountsTest extends TestCase
         $this->assertSame($shipping, $line['shipping_price_cents']);
         $this->assertSame(500, $line['buyer_fee_cents'], 'the 5.00 EUR payment fee');
         $this->assertSame($total, self::monduAmount($line));
+    }
+
+    /**
+     * The buyer comes back from the hosted checkout and OXID calculates the basket differently than on the order
+     * page (here the payment fee changed). The order is not placed, the Mondu order is canceled and the buyer goes
+     * back to the order page.
+     */
+    public function testChangedBasketIsNotPlacedWhenTheBuyerComesBack(): void
+    {
+        $basket = $this->createBasket([]);
+        $mapper = oxNew(MonduOrderMapper::class);
+        $mapper->setBasket($basket);
+        $created = $mapper->getBasketGrossAmountCents();
+        $this->assertSame((int) round($basket->getPrice()->getBruttoPrice() * 100), $created);
+
+        $session = Registry::getSession();
+        $session->setVariable(MonduCheckoutController::SESSION_ORDER_AMOUNT, ['uuid' => 'uuid-1', 'gross_amount_cents' => $created]);
+
+        [$controller, $client] = $this->orderController();
+        $this->assertFalse($this->invoke($controller, 'hasMonduAmountChanged', $basket, 'uuid-1'), 'same basket');
+
+        $changed = $this->createBasket(['fee' => 2.50]);
+        $this->assertTrue($this->invoke($controller, 'hasMonduAmountChanged', $changed, 'uuid-1'), 'fee added');
+        $this->assertFalse($this->invoke($controller, 'hasMonduAmountChanged', $changed, 'uuid-2'), 'other Mondu order, nothing stored for it');
+
+        $this->assertSame('order', $this->invoke($controller, 'rejectChangedBasket', $changed, 'uuid-1'));
+        $this->assertSame(['uuid-1'], $client->cancellations);
+        $this->assertNull($session->getVariable(MonduCheckoutController::SESSION_ORDER_AMOUNT));
+        $this->assertFalse($this->invoke($controller, 'hasMonduAmountChanged', $changed, 'uuid-1'), 'checked once');
+    }
+
+    private function orderController(): array
+    {
+        $client = new class extends MonduClient {
+            public array $cancellations = [];
+
+            public function __construct()
+            {
+            }
+
+            public function cancelOrder($orderUuid)
+            {
+                $this->cancellations[] = $orderUuid;
+
+                return ['uuid' => $orderUuid, 'state' => 'canceled'];
+            }
+        };
+        $controller = oxNew(OrderController::class);
+        (new \ReflectionClass(MonduOrderController::class))->getProperty('_client')->setValue($controller, $client);
+
+        return [$controller, $client];
+    }
+
+    private function invoke(object $controller, string $method, ...$arguments): mixed
+    {
+        return (new \ReflectionClass(MonduOrderController::class))->getMethod($method)->invoke($controller, ...$arguments);
     }
 
     private static function monduAmount(array $line): int

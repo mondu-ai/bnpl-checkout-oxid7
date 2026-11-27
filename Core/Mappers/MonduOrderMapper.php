@@ -91,6 +91,14 @@ class MonduOrderMapper
         return MonduHelper::removeEmptyElementsFromArray($data);
     }
 
+    /**
+     * Gross amount the Mondu order gets for the current state of the basket.
+     */
+    public function getBasketGrossAmountCents(): int
+    {
+        return $this->getBasketAmounts($this->getBasket(), $this->getOrderLineItems())['gross_amount_cents'];
+    }
+
     protected function getOrderLineItems()
     {
         $basketContents = $this->getBasket()->getContents();

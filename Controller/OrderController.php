@@ -14,6 +14,7 @@ use OxidEsales\Eshop\Core\Request;
 use OxidEsales\Eshop\Core\UtilsView;
 use OxidEsales\MonduPayment\Core\Http\MonduClient;
 use OxidEsales\MonduPayment\Core\Mappers\MonduAdjustmentMapper;
+use OxidEsales\MonduPayment\Core\Mappers\MonduOrderMapper;
 use OxidEsales\MonduPayment\Core\Utils\MonduHelper;
 use Psr\Log\LoggerInterface;
 use Symfony\Component\Config\Definition\Exception\Exception;
@@ -60,6 +61,11 @@ class OrderController extends OrderController_parent
             }
 
             $oBasket = $this->getBasket();
+            $oBasket->calculateBasket(true);
+
+            if ($this->hasMonduAmountChanged($oBasket, $orderUuid)) {
+                return $this->rejectChangedBasket($oBasket, $orderUuid);
+            }
 
             try {
                 $iSuccess = $this->monduExecute($oBasket, $orderUuid);
@@ -94,7 +100,6 @@ class OrderController extends OrderController_parent
         }
 
         $iSuccess = 0;
-        $oBasket->calculateBasket(true);
         $oOrder = oxNew(Order::class);
 
         try {
@@ -109,6 +114,7 @@ class OrderController extends OrderController_parent
         }
 
         if ($oBasket->getOrderId()) {
+            Registry::getSession()->deleteVariable(MonduCheckoutController::SESSION_ORDER_AMOUNT);
             // the order is stored (also when only the order mail failed)
             $this->syncMonduOrderAmount($oBasket->getOrderId(), $orderUuid);
         } elseif ($iSuccess !== Order::ORDER_STATE_ORDEREXISTS) {
@@ -118,6 +124,51 @@ class OrderController extends OrderController_parent
         $this->confirmOrder($oBasket, $orderUuid);
 
         return $iSuccess;
+    }
+
+    /**
+     * OXID recalculates the basket when the buyer comes back from the hosted checkout. Shipping, discounts or
+     * costs can come out different from the order page, where the Mondu order was created (for example when two
+     * shipping rules have the same priority). Like OXID's own basket check, the order is then not placed with an
+     * amount the buyer did not see.
+     */
+    protected function hasMonduAmountChanged(Basket $oBasket, $orderUuid): bool
+    {
+        $created = Registry::getSession()->getVariable(MonduCheckoutController::SESSION_ORDER_AMOUNT);
+        if (!is_array($created) || ($created['uuid'] ?? null) !== $orderUuid) {
+            // no amount stored for this Mondu order, e.g. the order was placed already
+            return false;
+        }
+
+        $mapper = oxNew(MonduOrderMapper::class);
+        $mapper->setBasket($oBasket);
+        $amount = $mapper->getBasketGrossAmountCents();
+
+        if ($amount === (int) $created['gross_amount_cents']) {
+            return false;
+        }
+
+        $this->_logger->warning(
+            "MonduOrderController [hasMonduAmountChanged]: Mondu order {$orderUuid} was created with "
+            . "{$created['gross_amount_cents']} cents, the basket has {$amount} cents now"
+        );
+
+        return true;
+    }
+
+    /**
+     * The authorized Mondu order does not match the basket any more: it is canceled and the buyer goes back to the
+     * order page, sees the new total and confirms again, which creates a new Mondu order.
+     */
+    protected function rejectChangedBasket(Basket $oBasket, $orderUuid): string
+    {
+        Registry::getSession()->deleteVariable(MonduCheckoutController::SESSION_ORDER_AMOUNT);
+        $this->cancelUnplacedMonduOrder($orderUuid, 'basket changed');
+
+        $next = $oBasket->getProductsCount() ? 'order' : 'basket';
+        Registry::getUtilsView()->addErrorToDisplay('MONDU_BASKET_CHANGED', false, true, '', $next);
+
+        return $next;
     }
 
     /**
@@ -143,9 +194,8 @@ class OrderController extends OrderController_parent
     }
 
     /**
-     * The Mondu order is created from the basket before the buyer goes to the hosted checkout. OXID recalculates
-     * the basket when the order is placed, so shipping, discounts or costs can differ from what Mondu has.
-     * If they do, the Mondu order is adjusted to the OXID order. If Mondu does not accept the adjustment,
+     * Fallback after the order is placed: if the OXID order still differs from the Mondu order (the basket check
+     * above could not run, or the stored order differs from the basket), the Mondu order is adjusted to it. If Mondu does not accept the adjustment,
      * the order is moved to the problems folder so that the merchant sees it before invoicing.
      */
     protected function syncMonduOrderAmount($orderId, $orderUuid): void

@@ -3,10 +3,12 @@ import {
   adminLogin,
   captureMonduOrder,
   confirmHostedCheckout,
+  confirmHostedCheckoutOnce,
   dbConfigured,
   getMonduInvoices,
   getMonduOrder,
   goToOrderStep,
+  makeShippingRulesUnambiguous,
   monduApiKey,
   openOrderOverview,
   quote,
@@ -31,6 +33,7 @@ const PAYMENT_ID = 'oxmondu_invoice';
 const DISCOUNT_ID = 'mondue2ediscount';
 const SERIES_ID = 'mondue2eseries';
 const backup: Record<string, string> = {};
+let restoreShippingRules = () => {};
 
 function setShipping(amount: number) {
   sql(`update oxdelivery set oxaddsum = ${amount} where oxid = ${quote(backup.standardId)}`);
@@ -66,15 +69,10 @@ test.beforeAll(() => {
   // often shared by several test shops, so continue the order numbers from a value no other shop uses
   sql(`update oxcounters set oxcount = greatest(oxcount, ${Math.floor(Date.now() / 1000)}) where oxident = 'oxOrder'`);
 
-  // the demo data has two shipping rules of the same priority for the standard shipping set (0 and 10 EUR),
-  // OXID then picks one by chance; make the standard rule the only candidate
-  const [standardId, standardSum, expressId, expressSort] = sql(
-    `select s.oxid, s.oxaddsum, e.oxid, e.oxsort from oxdelivery s, oxdelivery e
-     where s.oxtitle = 'Standard' and e.oxtitle = 'Express'`,
-  ).split('\t');
-  Object.assign(backup, { standardId, standardSum, expressId, expressSort });
+  backup.standardId = sql(`select oxid from oxdelivery where oxtitle = 'Standard'`);
+  backup.standardSum = sql(`select oxaddsum from oxdelivery where oxtitle = 'Standard'`);
   backup.paymentFee = sql(`select oxaddsum from oxpayments where oxid = '${PAYMENT_ID}'`);
-  sql(`update oxdelivery set oxsort = (select m from (select max(oxsort) + 1 m from oxdelivery) t) where oxid = ${quote(expressId)}`);
+  restoreShippingRules = makeShippingRulesUnambiguous();
 
   removeFromShop('oxdiscount', DISCOUNT_ID);
   sql(`delete from oxdiscount where oxid = '${DISCOUNT_ID}'`);
@@ -93,7 +91,7 @@ test.beforeAll(() => {
 test.afterAll(() => {
   if (!backup.standardId) return;
   setShipping(Number(backup.standardSum));
-  sql(`update oxdelivery set oxsort = ${Number(backup.expressSort)} where oxid = ${quote(backup.expressId)}`);
+  restoreShippingRules();
   setPaymentFee(Number(backup.paymentFee));
   removeFromShop('oxdiscount', DISCOUNT_ID);
   sql(`delete from oxdiscount where oxid = '${DISCOUNT_ID}'`);
@@ -213,47 +211,46 @@ test('order with payment fee, voucher and discount: Mondu gets the order total a
   await expectInvoiceAccepted(page, request, uuid, order);
 });
 
-test('shipping gets cheaper while the buyer is on the hosted checkout: the Mondu order is adjusted', async ({
-  page,
-  request,
-}) => {
-  const uuid = await placeMonduOrder(page, { afterMonduOrderCreated: () => setShipping(0) });
+for (const [label, before, after] of [
+  ['cheaper', 10, 0],
+  ['more expensive', 0, 10],
+] as const) {
+  test(`shipping gets ${label} while the buyer is on the hosted checkout: the buyer confirms the new total`, async ({
+    page,
+    request,
+  }) => {
+    setShipping(before);
+    const mondu = await captureMonduOrder(page, () => setShipping(after));
+    await goToOrderStep(page, PAYMENT_ID);
+    await submitOrder(page);
+    await confirmHostedCheckoutOnce(page);
 
-  const order = loadOxidOrder(uuid);
-  expect(order.delivery).toBe(0);
-  const monduOrder = await getMonduOrder(request, uuid);
-  expect(monduOrder.real_price_cents, 'Mondu order adjusted to the OXID order').toBe(order.total);
-  expect(monduOrder.adjusted).toBe(true);
-  expect(order.folder, 'an adjusted order is not a problem').not.toBe('ORDERFOLDER_PROBLEMS');
+    // back on the order page with the new total, no order placed, the first Mondu order canceled
+    await page.waitForURL(/cl=order/, { timeout: 90_000 });
+    expect(page.url()).not.toContain('cl=thankyou');
+    await expect(page.getByText(/Gesamtbetrag Ihrer Bestellung hat sich geändert|total of your order has changed/)).toBeVisible();
+    const firstUuid = mondu.uuid;
+    expect(firstUuid).toMatch(/^[0-9a-f-]{36}$/);
+    expect(sql(`select count(*) from oemondu_orders where order_uuid = ${quote(firstUuid)}`), 'no OXID order').toBe('0');
+    expect((await getMonduOrder(request, firstUuid)).state).toBe('canceled');
 
-  await expectInvoiceAccepted(page, request, uuid, order);
-});
+    // the buyer confirms again: a new Mondu order with the new total
+    const agb = page.locator('#checkAgbTop, #checkAgbBottom, input[name="ord_agb"]').first();
+    if (await agb.isVisible().catch(() => false)) await agb.check();
+    await submitOrder(page);
+    await confirmHostedCheckout(page);
+    expect(mondu.uuid).not.toBe(firstUuid);
 
-test('shipping gets more expensive while the buyer is on the hosted checkout: adjusted or flagged', async ({
-  page,
-  request,
-}) => {
-  setShipping(0);
-  const uuid = await placeMonduOrder(page, { afterMonduOrderCreated: () => setShipping(10) });
+    const order = loadOxidOrder(mondu.uuid);
+    expect(order.delivery).toBe(after * 100);
+    const monduOrder = await getMonduOrder(request, mondu.uuid);
+    expect(monduOrder.real_price_cents).toBe(order.total);
+    expect(monduOrder.adjusted, 'no adjustment needed').toBe(false);
+    expect(order.folder).toBe('ORDERFOLDER_NEW');
 
-  const order = loadOxidOrder(uuid);
-  expect(order.delivery).toBe(1000);
-  const monduOrder = await getMonduOrder(request, uuid);
-
-  if (monduOrder.real_price_cents === order.total) {
-    // Mondu accepted the higher amount
-    expect(monduOrder.adjusted).toBe(true);
-    expect(order.folder, 'an adjusted order is not a problem').not.toBe('ORDERFOLDER_PROBLEMS');
-    await expectInvoiceAccepted(page, request, uuid, order);
-    return;
-  }
-
-  // Mondu did not accept it: the merchant must see it before invoicing
-  expect(order.folder).toBe('ORDERFOLDER_PROBLEMS');
-  const admin = await adminLogin(page);
-  await openOrderOverview(page, admin, order.id);
-  await expect(page.locator('.errorbox')).toContainText('Mondu');
-});
+    await expectInvoiceAccepted(page, request, mondu.uuid, order);
+  });
+}
 
 test('the admin warns when the Mondu order does not match the OXID order', async ({ page, request }) => {
   // Mondu sandbox accepts every adjustment, so the mismatch is made in the OXID order after it is placed
@@ -283,10 +280,7 @@ test('OXID does not place the order after the hosted checkout: the Mondu order i
   try {
     await goToOrderStep(page, PAYMENT_ID);
     await submitOrder(page);
-    await page.waitForURL('**mondu.ai/**', { timeout: 60_000 });
-    const confirmButton = page.getByRole('button', { name: /zahlen mit|pay with|bestätigen|confirm|submit/i }).first();
-    await confirmButton.waitFor({ state: 'visible', timeout: 30_000 });
-    await confirmButton.click({ force: true });
+    await confirmHostedCheckoutOnce(page);
 
     // back in the shop, but not on the thank-you page
     await page.waitForURL((url) => !url.hostname.includes('mondu.ai'), { timeout: 90_000 });

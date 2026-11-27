@@ -60,11 +60,18 @@ export async function submitOrder(page: Page) {
   await page.getByRole('button', { name: 'Zahlungspflichtig bestellen' }).click();
 }
 
-export async function confirmHostedCheckout(page: Page) {
+/** Confirms the payment on the hosted checkout and waits until the buyer is back in the shop. */
+export async function confirmHostedCheckoutOnce(page: Page) {
   await page.waitForURL('**mondu.ai/**', { timeout: 60_000 });
   const confirmButton = page.getByRole('button', { name: /zahlen mit|pay with|bestätigen|confirm|submit/i }).first();
   await confirmButton.waitFor({ state: 'visible', timeout: 30_000 });
   await confirmButton.click({ force: true });
+  await page.waitForURL((url) => !url.hostname.includes('mondu.ai'), { timeout: 90_000 });
+  await page.waitForLoadState('networkidle');
+}
+
+export async function confirmHostedCheckout(page: Page) {
+  await confirmHostedCheckoutOnce(page);
   await page.waitForURL(/cl=thankyou/, { timeout: 90_000 });
 }
 
@@ -104,6 +111,22 @@ export function sql(query: string): string {
 
 export function quote(value: string): string {
   return `'${value.replace(/'/g, "''")}'`;
+}
+
+/**
+ * The OXID demo data has two shipping rules of the same priority for the standard shipping set (Standard 0 EUR,
+ * Express 10 EUR). The database then decides which one comes first and that can change between two requests, so
+ * the total on the order page can differ from the total when the buyer comes back from the hosted checkout.
+ * Gives Express a lower priority so that Standard always wins. Returns a function that restores the demo data.
+ */
+export function makeShippingRulesUnambiguous(): () => void {
+  const row = sql(
+    `select s.oxid, e.oxid, e.oxsort from oxdelivery s, oxdelivery e where s.oxtitle = 'Standard' and e.oxtitle = 'Express'`,
+  );
+  if (!row) return () => {};
+  const [standardId, expressId, expressSort] = row.split('\t');
+  sql(`update oxdelivery set oxsort = (select m from (select max(oxsort) + 1 m from oxdelivery) t) where oxid = ${quote(expressId)}`);
+  return () => sql(`update oxdelivery set oxsort = ${Number(expressSort)} where oxid = ${quote(expressId)}`);
 }
 
 // --- Mondu API (sandbox), optional ---
